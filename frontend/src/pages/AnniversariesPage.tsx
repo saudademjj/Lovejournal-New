@@ -6,7 +6,7 @@ import { fetchTimeline, createKeydate } from "../lib/api";
 import { TimelineItem } from "../lib/types";
 import { getDaysDiff, cleanGeo } from "../lib/utils";
 import { Input } from "../components/ui/input";
-import { AMAP_JS_KEY } from "../lib/config";
+import { AMAP_WEB_KEY } from "../lib/config";
 
 const nowInputValue = () => {
   const d = new Date();
@@ -43,7 +43,7 @@ const AnniversariesPage: React.FC = () => {
     }
     try {
       const res = await fetch(
-        `https://restapi.amap.com/v3/geocode/geo?key=${AMAP_JS_KEY}&address=${encodeURIComponent(query)}`
+        `https://restapi.amap.com/v3/geocode/geo?key=${AMAP_WEB_KEY}&address=${encodeURIComponent(query)}`
       );
       const data = await res.json();
       if (data.status === "1" && data.geocodes?.length) {
@@ -51,10 +51,10 @@ const AnniversariesPage: React.FC = () => {
         setForm((f) => ({ ...f, locationCoords: loc }));
         setError(null);
       } else {
-        setError("未找到坐标");
+        setError("未找到坐标，请确认地点是否正确");
       }
     } catch (err) {
-      setError("自动匹配失败");
+      setError("自动匹配失败，请检查网络或稍后重试");
     }
   };
 
@@ -63,11 +63,16 @@ const AnniversariesPage: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      await createKeydate({ title: form.title, date: form.date, location: form.location });
+      await createKeydate({
+        title: form.title,
+        date: form.date,
+        location: form.location,
+        location_coords: form.locationCoords || undefined,
+      });
       await loadDates();
       setModalOpen(false);
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "保存失败");
+      setError(err?.response?.data?.detail || err?.message || "保存失败，请稍后重试");
     } finally {
       setSaving(false);
     }

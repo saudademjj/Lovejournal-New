@@ -56,7 +56,7 @@ async def create_entry(
     _: User = Depends(get_current_user),
 ):
     geo_helper = await _get_geo_helper(request)
-    location = await geo_helper.merge_location_and_coords(payload.location, None)
+    location = await geo_helper.merge_location_and_coords(payload.location, payload.location_coords)
     tags = _format_tags(payload.content, location)
     entry = Entry(content=payload.content, created_at=payload.created_at or datetime.now(), location=location, tags=tags)
     session.add(entry)
@@ -77,13 +77,18 @@ async def update_entry(
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
     geo_helper = await _get_geo_helper(request)
-    location = await geo_helper.merge_location_and_coords(payload.location, None)
-    if payload.content:
+    updated_location = entry.location
+    if payload.location is not None or payload.location_coords is not None:
+        updated_location = await geo_helper.merge_location_and_coords(
+            payload.location if payload.location is not None else entry.location,
+            payload.location_coords,
+        )
+        entry.location = updated_location
+    if payload.content is not None:
         entry.content = payload.content
-    if payload.created_at:
+    if payload.created_at is not None:
         entry.created_at = payload.created_at
-    entry.location = location
-    entry.tags = _format_tags(entry.content, location)
+    entry.tags = _format_tags(entry.content, updated_location)
     await session.commit()
     await session.refresh(entry)
     return _timeline_entry_from_entry(entry)
@@ -111,7 +116,7 @@ async def create_keydate(
     _: User = Depends(get_current_user),
 ):
     geo_helper = await _get_geo_helper(request)
-    location = await geo_helper.merge_location_and_coords(payload.location, None)
+    location = await geo_helper.merge_location_and_coords(payload.location, payload.location_coords)
     date = payload.date or datetime.now()
     kd = KeyDate(title=payload.title, date=date, location=location, tags=_format_tags(payload.title, location))
     session.add(kd)
@@ -139,13 +144,18 @@ async def update_keydate(
     if not kd:
         raise HTTPException(status_code=404, detail="Key date not found")
     geo_helper = await _get_geo_helper(request)
-    location = await geo_helper.merge_location_and_coords(payload.location, None)
-    if payload.title:
+    updated_location = kd.location
+    if payload.location is not None or payload.location_coords is not None:
+        updated_location = await geo_helper.merge_location_and_coords(
+            payload.location if payload.location is not None else kd.location,
+            payload.location_coords,
+        )
+        kd.location = updated_location
+    if payload.title is not None:
         kd.title = payload.title
-    if payload.date:
+    if payload.date is not None:
         kd.date = payload.date
-    kd.location = location
-    kd.tags = _format_tags(kd.title, location)
+    kd.tags = _format_tags(kd.title, updated_location)
     await session.commit()
     await session.refresh(kd)
     return TimelineEntry(

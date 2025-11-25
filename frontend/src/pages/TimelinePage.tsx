@@ -21,6 +21,16 @@ const nowInputValue = () => {
   return d.toISOString().slice(0, 16);
 };
 
+const extractCoordsText = (value?: string | null) => {
+  if (!value) return "";
+  const nums = (value.replace("，", ",").match(/-?\d+(?:\.\d+)?/g) || []).map(parseFloat);
+  if (nums.length < 2 || Number.isNaN(nums[0]) || Number.isNaN(nums[1])) return "";
+  let lat = nums[0];
+  let lng = nums[1];
+  if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) [lat, lng] = [lng, lat];
+  return `${lat},${lng}`;
+};
+
 const TimelinePage: React.FC = () => {
   const { items, hasMore, filters, tags, init, loadMore, setFilters } = useTimelineStore();
   const [search, setSearch] = React.useState(filters.q);
@@ -93,7 +103,7 @@ const TimelinePage: React.FC = () => {
       caption: item?.caption || "",
       title: item?.title || "",
       location: item?.location || "",
-      locationCoords: "",
+      locationCoords: extractCoordsText(item?.location),
       date: item ? ts.toISOString().slice(0, 16) : nowInputValue(),
       file: null,
     });
@@ -121,10 +131,10 @@ const TimelinePage: React.FC = () => {
         setForm((f) => ({ ...f, locationCoords: loc }));
         setError(null);
       } else {
-        setError("未找到坐标");
+        setError("未找到坐标，请确认地点是否正确");
       }
     } catch (err) {
-      setError("自动匹配失败");
+      setError("自动匹配失败，请检查网络或稍后重试");
     }
   };
 
@@ -140,15 +150,31 @@ const TimelinePage: React.FC = () => {
             content: form.content,
             created_at: form.date,
             location: form.location,
+            location_coords: form.locationCoords || undefined,
           });
         } else {
-          await createEntry({ content: form.content, created_at: form.date, location: form.location });
+          await createEntry({
+            content: form.content,
+            created_at: form.date,
+            location: form.location,
+            location_coords: form.locationCoords || undefined,
+          });
         }
       } else if (modalState.type === "keydate") {
         if (modalState.mode === "edit" && modalState.item) {
-          await updateKeydate(modalState.item.id, { title: form.title, date: form.date, location: form.location });
+          await updateKeydate(modalState.item.id, {
+            title: form.title,
+            date: form.date,
+            location: form.location,
+            location_coords: form.locationCoords || undefined,
+          });
         } else {
-          await createKeydate({ title: form.title, date: form.date, location: form.location });
+          await createKeydate({
+            title: form.title,
+            date: form.date,
+            location: form.location,
+            location_coords: form.locationCoords || undefined,
+          });
         }
       } else if (modalState.type === "photo") {
         if (modalState.mode === "edit" && modalState.item) {
@@ -177,7 +203,7 @@ const TimelinePage: React.FC = () => {
       await init(filters);
       closeModal();
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "保存失败");
+      setError(err?.response?.data?.detail || err?.message || "保存失败，请稍后重试");
     } finally {
       setSaving(false);
     }

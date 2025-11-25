@@ -8,6 +8,7 @@ export interface TimelineItem {
   caption?: string;
   title?: string;
   location?: string | null;
+  location_coords?: string | null;
   tags: string[];
   image?: string;
 }

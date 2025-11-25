@@ -58,14 +58,14 @@ export async function fetchTags() {
   return res.data.tags;
 }
 
-export async function createEntry(payload: { content: string; created_at?: string; location?: string }) {
+export async function createEntry(payload: { content: string; created_at?: string; location?: string; location_coords?: string }) {
   const res = await api.post("/entries", payload);
   return res.data;
 }
 
 export async function updateEntry(
   id: number,
-  payload: { content?: string; created_at?: string; location?: string }
+  payload: { content?: string; created_at?: string; location?: string; location_coords?: string }
 ) {
   const res = await api.put(`/entries/${id}`, payload);
   return res.data;
@@ -75,14 +75,14 @@ export async function deleteEntry(id: number) {
   await api.delete(`/entries/${id}`);
 }
 
-export async function createKeydate(payload: { title: string; date?: string; location?: string }) {
+export async function createKeydate(payload: { title: string; date?: string; location?: string; location_coords?: string }) {
   const res = await api.post("/keydates", payload);
   return res.data;
 }
 
 export async function updateKeydate(
   id: number,
-  payload: { title?: string; date?: string; location?: string }
+  payload: { title?: string; date?: string; location?: string; location_coords?: string }
 ) {
   const res = await api.put(`/keydates/${id}`, payload);
   return res.data;
