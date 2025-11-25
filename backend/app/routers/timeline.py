@@ -1,15 +1,13 @@
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..database import get_session
 from ..models import Entry, KeyDate, Photo
 from ..schemas import TagResponse, TimelineEntry, TimelineResponse
-from ..utils import extract_tags
 
 router = APIRouter(prefix="/api", tags=["timeline"])
 settings = get_settings()
@@ -21,24 +19,14 @@ def split_tags(text: str | None) -> list[str]:
     return [t.strip() for t in text.split(",") if t.strip()]
 
 
-def matches_text(search: str, *parts: Optional[str]) -> bool:
-    if not search:
-        return True
-    blob = " ".join([p or "" for p in parts]).lower()
-    return search in blob
-
-
-def matches_tag(tag: str, tags_text: Optional[str]) -> bool:
-    if not tag:
-        return True
-    if not tags_text:
-        return False
-    return tag in [t.strip().lower() for t in tags_text.split(",") if t.strip()]
-
-
 async def build_timeline(
-    session: AsyncSession, search: str, type_filter: str, tag: str
-) -> list[TimelineEntry]:
+    session: AsyncSession,
+    search: str,
+    type_filter: str,
+    tag: str,
+    page: int | None = None,
+    per_page: int | None = None,
+) -> tuple[list[TimelineEntry], int]:
     search = (search or "").strip().lower()
     type_filter = (type_filter or "all").lower()
     tag = (tag or "").strip().lower()
@@ -49,60 +37,114 @@ async def build_timeline(
 
     timeline: list[TimelineEntry] = []
 
+    def tag_clause(column):
+        wrapped = literal(",") + func.lower(func.coalesce(column, "")) + literal(",")
+        return wrapped.like(f"%,{tag},%")
+
+    selects = []
+
     if include_entry:
-        res = await session.execute(select(Entry))
-        for e in res.scalars():
-            if not matches_tag(tag, e.tags):
-                continue
-            if matches_text(search, e.content, e.location):
-                timeline.append(
-                    TimelineEntry(
-                        id=e.id,
-                        type="entry",
-                        timestamp=e.created_at or datetime.now(),
-                        content=e.content,
-                        location=e.location,
-                        tags=split_tags(e.tags),
-                    )
+        stmt = select(
+            Entry.id.label("id"),
+            literal("entry").label("type"),
+            func.coalesce(Entry.created_at, func.now()).label("timestamp"),
+            Entry.content.label("content"),
+            literal(None).label("caption"),
+            literal(None).label("title"),
+            Entry.location.label("location"),
+            Entry.tags.label("tags"),
+            literal(None).label("image"),
+        )
+        if search:
+            like = f"%{search}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(func.coalesce(Entry.content, "")).like(like),
+                    func.lower(func.coalesce(Entry.location, "")).like(like),
                 )
+            )
+        if tag:
+            stmt = stmt.where(tag_clause(Entry.tags))
+        selects.append(stmt)
 
     if include_keydate:
-        res = await session.execute(select(KeyDate))
-        for k in res.scalars():
-            if not matches_tag(tag, k.tags):
-                continue
-            if matches_text(search, k.title, k.location):
-                timeline.append(
-                    TimelineEntry(
-                        id=k.id,
-                        type="keydate",
-                        timestamp=k.date,
-                        title=k.title,
-                        location=k.location,
-                        tags=split_tags(k.tags),
-                    )
+        stmt = select(
+            KeyDate.id.label("id"),
+            literal("keydate").label("type"),
+            KeyDate.date.label("timestamp"),
+            literal(None).label("content"),
+            literal(None).label("caption"),
+            KeyDate.title.label("title"),
+            KeyDate.location.label("location"),
+            KeyDate.tags.label("tags"),
+            literal(None).label("image"),
+        )
+        if search:
+            like = f"%{search}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(func.coalesce(KeyDate.title, "")).like(like),
+                    func.lower(func.coalesce(KeyDate.location, "")).like(like),
                 )
+            )
+        if tag:
+            stmt = stmt.where(tag_clause(KeyDate.tags))
+        selects.append(stmt)
 
     if include_photo:
-        res = await session.execute(select(Photo))
-        for p in res.scalars():
-            if not matches_tag(tag, p.tags):
-                continue
-            if matches_text(search, p.caption, p.filename, p.location):
-                timeline.append(
-                    TimelineEntry(
-                        id=p.id,
-                        type="photo",
-                        timestamp=p.created_at or datetime.now(),
-                        caption=p.caption,
-                        location=p.location,
-                        tags=split_tags(p.tags),
-                        image=f"/uploads/{p.filename}",
-                    )
+        stmt = select(
+            Photo.id.label("id"),
+            literal("photo").label("type"),
+            func.coalesce(Photo.created_at, func.now()).label("timestamp"),
+            literal(None).label("content"),
+            Photo.caption.label("caption"),
+            literal(None).label("title"),
+            Photo.location.label("location"),
+            Photo.tags.label("tags"),
+            (literal("/uploads/") + Photo.filename).label("image"),
+        )
+        if search:
+            like = f"%{search}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(func.coalesce(Photo.caption, "")).like(like),
+                    func.lower(func.coalesce(Photo.filename, "")).like(like),
+                    func.lower(func.coalesce(Photo.location, "")).like(like),
                 )
+            )
+        if tag:
+            stmt = stmt.where(tag_clause(Photo.tags))
+        selects.append(stmt)
 
-    timeline.sort(key=lambda x: x.timestamp, reverse=True)
-    return timeline
+    if not selects:
+        return [], 0
+
+    union_stmt = union_all(*selects).subquery()
+
+    total = await session.scalar(select(func.count()).select_from(union_stmt)) or 0
+    ordered = select(union_stmt).order_by(union_stmt.c.timestamp.desc())
+    if page and per_page:
+        ordered = ordered.offset((page - 1) * per_page).limit(per_page)
+
+    res = await session.execute(ordered)
+    rows = res.mappings().all()
+
+    timeline = [
+        TimelineEntry(
+            id=row["id"],
+            type=row["type"],
+            timestamp=row["timestamp"] or datetime.now(),
+            content=row.get("content"),
+            caption=row.get("caption"),
+            title=row.get("title"),
+            location=row.get("location"),
+            tags=split_tags(row.get("tags")),
+            image=row.get("image"),
+        )
+        for row in rows
+    ]
+
+    return timeline, total
 
 
 @router.get("/timeline", response_model=TimelineResponse)
@@ -114,13 +156,9 @@ async def get_timeline(
     per_page: int = Query(24, ge=1, le=500),
     session: AsyncSession = Depends(get_session),
 ):
-    timeline = await build_timeline(session, q, type, tag)
-    total = len(timeline)
-    start = (page - 1) * per_page
-    end = start + per_page
-    items = timeline[start:end]
-    has_more = end < total
-    return TimelineResponse(items=items, page=page, has_more=has_more)
+    timeline, total = await build_timeline(session, q, type, tag, page, per_page)
+    has_more = page * per_page < total
+    return TimelineResponse(items=timeline, page=page, has_more=has_more)
 
 
 @router.get("/tags", response_model=TagResponse)

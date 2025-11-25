@@ -3,6 +3,7 @@ import React from "react";
 import { MapMarker } from "../lib/types";
 import { AMAP_JS_CODE, AMAP_JS_KEY } from "../lib/config";
 import { useTimelineStore } from "../store/timeline";
+import { shallow } from "zustand/shallow";
 
 declare global {
   interface Window {
@@ -18,13 +19,16 @@ type MarkerFilters = {
 };
 
 const MapPage: React.FC = () => {
-  const { mapItems, mapLoading, mapError, refreshMap, filters: timelineFilters } = useTimelineStore((state) => ({
-    mapItems: state.mapItems,
-    mapLoading: state.mapLoading,
-    mapError: state.mapError,
-    refreshMap: state.refreshMap,
-    filters: state.filters,
-  }));
+  const { mapItems, mapLoading, mapError, refreshMap, filters: timelineFilters } = useTimelineStore(
+    (state) => ({
+      mapItems: state.mapItems,
+      mapLoading: state.mapLoading,
+      mapError: state.mapError,
+      refreshMap: state.refreshMap,
+      filters: state.filters,
+    }),
+    shallow
+  );
   const { q, type, tag } = timelineFilters;
   const [markerFilters, setMarkerFilters] = React.useState<MarkerFilters>({ entry: true, photo: true, keydate: true });
   const [geoLoaded, setGeoLoaded] = React.useState(false);
@@ -34,6 +38,7 @@ const MapPage: React.FC = () => {
   const [buildingMarkers, setBuildingMarkers] = React.useState(false);
   const mapRef = React.useRef<any>(null);
   const markerInstancesRef = React.useRef<any[]>([]);
+  const buildSeqRef = React.useRef(0);
   const infoWindowRef = React.useRef<any>(null);
   const provincePolygonsRef = React.useRef<Map<string, any[]>>(new Map());
   const visitedCodesRef = React.useRef<Set<string>>(new Set());
@@ -64,9 +69,10 @@ const MapPage: React.FC = () => {
   }, []);
 
   const drawProvince = React.useCallback(
-    (adcode: string) => {
+    (adcode: string, targetPolygons?: Map<string, any[]>) => {
       if (!window.AMap || !mapRef.current) return;
-      if (provincePolygonsRef.current.has(adcode)) return;
+      const store = targetPolygons || provincePolygonsRef.current;
+      if (store.has(adcode)) return;
       const feats = provinceFeaturesRef.current.get(adcode);
       if (!feats || !feats.length) {
         console.warn("No features for province:", adcode);
@@ -115,15 +121,19 @@ const MapPage: React.FC = () => {
         }
       });
       if (polys.length) {
-        provincePolygonsRef.current.set(adcode, polys);
+        store.set(adcode, polys);
       }
     },
     []
   );
 
-  const refreshProvinces = React.useCallback(() => {
-    visitedCodesRef.current.forEach((code) => drawProvince(code));
-  }, [drawProvince]);
+  const refreshProvinces = React.useCallback(
+    (visited?: Set<string>, targetPolygons?: Map<string, any[]>) => {
+      const codes = visited || visitedCodesRef.current;
+      codes.forEach((code) => drawProvince(code, targetPolygons));
+    },
+    [drawProvince]
+  );
 
   const markers = React.useMemo<MapMarker[]>(() => {
     const parseCoords = (location?: string | null) => {
@@ -157,8 +167,14 @@ const MapPage: React.FC = () => {
   const buildMarkers = React.useCallback(
     async (data: MapMarker[]) => {
       if (!window.AMap || !mapRef.current) return;
+      const buildId = ++buildSeqRef.current;
       setBuildingMarkers(true);
       const map = mapRef.current;
+
+      const cleanupTemp = (markers: any[], polygons: Map<string, any[]>) => {
+        markers.forEach((m) => m.setMap(null));
+        polygons.forEach((polys) => polys.forEach((p) => p.setMap(null)));
+      };
 
       try {
         markerInstancesRef.current.forEach((m) => m.setMap(null));
@@ -171,6 +187,8 @@ const MapPage: React.FC = () => {
         const geocoder = new window.AMap.Geocoder({ extensions: "all" });
         const countCache: Record<string, number> = {};
         const geocodeTasks: Promise<void>[] = [];
+        const localVisited = new Set<string>();
+        const localPolygons = new Map<string, any[]>();
 
         const jitter = (lat: number, lng: number) => {
           const key = `${Math.round(lat * 10)},${Math.round(lng * 10)}`;
@@ -201,6 +219,7 @@ const MapPage: React.FC = () => {
         (window as any).closeInfoWindow = closeInfo;
 
         for (const m of data) {
+          if (buildSeqRef.current !== buildId) break;
           const pos = jitter(m.lat, m.lng);
           let marker;
           if (m.kind === "keydate") {
@@ -258,15 +277,19 @@ const MapPage: React.FC = () => {
           geocodeTasks.push(
             new Promise<void>((resolve) => {
               geocoder.getAddress([m.lng, m.lat], (_status: any, result: any) => {
+                if (buildSeqRef.current !== buildId) {
+                  resolve();
+                  return;
+                }
                 const raw = result?.regeocode?.addressComponent?.adcode;
                 if (raw) {
                   const code = String(raw).slice(0, 2).padEnd(6, "0");
                   console.log("Geocoded:", m.label, "adcode:", raw, "province:", code);
-                  const prevSize = visitedCodesRef.current.size;
-                  visitedCodesRef.current.add(code);
-                  if (visitedCodesRef.current.size > prevSize) {
-                    console.log("New province added:", code, "Total provinces:", visitedCodesRef.current.size);
-                    refreshProvinces();
+                  const prevSize = localVisited.size;
+                  localVisited.add(code);
+                  if (localVisited.size > prevSize) {
+                    console.log("New province added:", code, "Total provinces:", localVisited.size);
+                    refreshProvinces(localVisited, localPolygons);
                   }
                 }
                 resolve();
@@ -274,39 +297,43 @@ const MapPage: React.FC = () => {
             })
           );
         }
+        if (geocodeTasks.length) {
+          await Promise.allSettled(geocodeTasks);
+        }
+        if (buildSeqRef.current !== buildId) {
+          cleanupTemp(markerInstances, localPolygons);
+          return;
+        }
         markerInstancesRef.current = markerInstances;
+        visitedCodesRef.current = localVisited;
+        provincePolygonsRef.current = localPolygons;
         if (markerInstances.length > 0) {
           map.setFitView(null, false, [100, 60, 100, 60]);
         }
-        if (geocodeTasks.length) {
-          await Promise.allSettled(geocodeTasks);
-          refreshProvinces();
-        }
+        refreshProvinces(localVisited, localPolygons);
       } finally {
-        setBuildingMarkers(false);
+        if (buildSeqRef.current === buildId) {
+          setBuildingMarkers(false);
+        }
       }
     },
     [refreshProvinces, markerFilters]
   );
 
-  const initMap = React.useCallback(
-    (data: MapMarker[]) => {
-      if (!window.AMap || mapInitialized.current) return;
-      console.log("Initializing map with", data.length, "markers");
-      window._AMapSecurityConfig = { securityJsCode: AMAP_JS_CODE };
-      const map = new window.AMap.Map("map", {
-        viewMode: "2D",
-        zoom: 4,
-        center: [104.06, 30.67],
-        mapStyle: "amap://styles/dark",
-        pitch: 0,
-      });
-      mapRef.current = map;
-      mapInitialized.current = true;
-      buildMarkers(data);
-    },
-    [buildMarkers]
-  );
+  const initMap = React.useCallback(() => {
+    if (!window.AMap || mapInitialized.current) return;
+    console.log("Initializing map");
+    window._AMapSecurityConfig = { securityJsCode: AMAP_JS_CODE };
+    const map = new window.AMap.Map("map", {
+      viewMode: "2D",
+      zoom: 4,
+      center: [104.06, 30.67],
+      mapStyle: "amap://styles/dark",
+      pitch: 0,
+    });
+    mapRef.current = map;
+    mapInitialized.current = true;
+  }, []);
 
   const toggleFilter = (kind: keyof MarkerFilters) => {
     const next = { ...markerFilters, [kind]: !markerFilters[kind] };
@@ -366,19 +393,19 @@ const MapPage: React.FC = () => {
   React.useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        refreshMap({ q, type, tag, per_page: 500 });
+        refreshMap({ q, type, tag, per_page: 500, force: true });
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [refreshMap, q, type, tag]);
 
-  // 5. 初始化地图（当 AMap、GeoJSON 和 markers 都准备好时）
+  // 5. 初始化地图（当 AMap 与 GeoJSON 准备好时）
   React.useEffect(() => {
     if (mapReady && window.AMap && geoLoaded && !mapInitialized.current) {
-      initMap(markers);
+      initMap();
     }
-  }, [mapReady, markers, geoLoaded, initMap]);
+  }, [mapReady, geoLoaded, initMap]);
 
   // 6. markers 更新时刷新地图标记
   React.useEffect(() => {

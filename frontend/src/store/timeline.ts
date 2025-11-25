@@ -16,13 +16,15 @@ interface TimelineState {
   loading: boolean;
   mapLoading: boolean;
   mapError: string | null;
+  mapRequestKey: string | null;
+  mapDataKey: string | null;
   filters: Filters;
   tags: string[];
   init: (filters?: Partial<Filters>) => Promise<void>;
   loadMore: () => Promise<void>;
   setFilters: (filters: Partial<Filters>) => Promise<void>;
   reset: () => Promise<void>;
-  refreshMap: (filters?: Partial<Filters> & { per_page?: number }) => Promise<void>;
+  refreshMap: (filters?: Partial<Filters> & { per_page?: number; force?: boolean }) => Promise<void>;
 }
 
 export const useTimelineStore = create<TimelineState>((set, get) => ({
@@ -33,6 +35,8 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
   loading: false,
   mapLoading: false,
   mapError: null,
+  mapRequestKey: null,
+  mapDataKey: null,
   filters: { q: "", type: "all", tag: "" },
   tags: [],
   init: async (filters = {}) => {
@@ -50,7 +54,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
         tags: Array.isArray(tags) ? tags : [],
         loading: false,
       });
-      await get().refreshMap({ ...currentFilters, per_page: 500 });
+      await get().refreshMap({ ...currentFilters, per_page: 500, force: true });
     } catch (e) {
       set({
         items: [],
@@ -60,6 +64,8 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
         tags: [],
         loading: false,
         mapLoading: false,
+        mapRequestKey: null,
+        mapDataKey: null,
         mapError: "地图数据加载失败",
       });
       throw e;
@@ -99,7 +105,16 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
   refreshMap: async (filters = {}) => {
     const merged = { ...get().filters, ...filters };
     const perPage = (filters as { per_page?: number }).per_page || 500;
-    set({ mapLoading: true, mapError: null });
+    const forceRefresh = (filters as { force?: boolean }).force || false;
+    const requestKey = `${merged.q || ""}|${merged.type}|${merged.tag}|${perPage}`;
+    const { mapLoading, mapRequestKey, mapDataKey } = get();
+    if (!forceRefresh && mapDataKey === requestKey && !mapLoading) {
+      return;
+    }
+    if (mapLoading && mapRequestKey === requestKey) {
+      return;
+    }
+    set({ mapLoading: true, mapError: null, mapRequestKey: requestKey });
     try {
       const res = await fetchTimeline({
         q: merged.q,
@@ -108,13 +123,20 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
         page: 1,
         per_page: perPage,
       });
+      if (get().mapRequestKey !== requestKey) {
+        return;
+      }
       set({
         mapItems: Array.isArray(res?.items) ? res.items : [],
         mapLoading: false,
         mapError: null,
+        mapRequestKey: null,
+        mapDataKey: requestKey,
       });
     } catch (e) {
-      set({ mapLoading: false, mapError: "地图数据加载失败" });
+      if (get().mapRequestKey === requestKey) {
+        set({ mapLoading: false, mapError: "地图数据加载失败", mapRequestKey: null, mapDataKey: null });
+      }
     }
   },
 }));

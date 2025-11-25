@@ -11,6 +11,7 @@
             <excludedPath path="/opt/lovejournal-new/backend/.venv" />
             <excludedPath path="/opt/lovejournal-new/frontend/node_modules" />
             <excludedPath path="/opt/lovejournal-new/backend/.env" />
+            <excludedPath path="/opt/lovejournal-new/frontend/dist" />
           </excludedPaths>
         </serverdata>
       </paths>
