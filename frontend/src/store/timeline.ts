@@ -10,22 +10,29 @@ type Filters = {
 
 interface TimelineState {
   items: TimelineItem[];
+  mapItems: TimelineItem[];
   page: number;
   hasMore: boolean;
   loading: boolean;
+  mapLoading: boolean;
+  mapError: string | null;
   filters: Filters;
   tags: string[];
   init: (filters?: Partial<Filters>) => Promise<void>;
   loadMore: () => Promise<void>;
   setFilters: (filters: Partial<Filters>) => Promise<void>;
   reset: () => Promise<void>;
+  refreshMap: (filters?: Partial<Filters> & { per_page?: number }) => Promise<void>;
 }
 
 export const useTimelineStore = create<TimelineState>((set, get) => ({
   items: [],
+  mapItems: [],
   page: 1,
   hasMore: true,
   loading: false,
+  mapLoading: false,
+  mapError: null,
   filters: { q: "", type: "all", tag: "" },
   tags: [],
   init: async (filters = {}) => {
@@ -43,8 +50,18 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
         tags: Array.isArray(tags) ? tags : [],
         loading: false,
       });
+      await get().refreshMap({ ...currentFilters, per_page: 500 });
     } catch (e) {
-      set({ items: [], page: 1, hasMore: false, tags: [], loading: false });
+      set({
+        items: [],
+        mapItems: [],
+        page: 1,
+        hasMore: false,
+        tags: [],
+        loading: false,
+        mapLoading: false,
+        mapError: "地图数据加载失败",
+      });
       throw e;
     }
   },
@@ -78,5 +95,26 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
   },
   reset: async () => {
     await get().init({ q: "", type: "all", tag: "" });
+  },
+  refreshMap: async (filters = {}) => {
+    const merged = { ...get().filters, ...filters };
+    const perPage = (filters as { per_page?: number }).per_page || 500;
+    set({ mapLoading: true, mapError: null });
+    try {
+      const res = await fetchTimeline({
+        q: merged.q,
+        type: merged.type,
+        tag: merged.tag,
+        page: 1,
+        per_page: perPage,
+      });
+      set({
+        mapItems: Array.isArray(res?.items) ? res.items : [],
+        mapLoading: false,
+        mapError: null,
+      });
+    } catch (e) {
+      set({ mapLoading: false, mapError: "地图数据加载失败" });
+    }
   },
 }));

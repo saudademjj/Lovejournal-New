@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from "react";
-import { fetchTimeline } from "../lib/api";
-import { MapMarker, TimelineItem } from "../lib/types";
+import { MapMarker } from "../lib/types";
 import { AMAP_JS_CODE, AMAP_JS_KEY } from "../lib/config";
+import { useTimelineStore } from "../store/timeline";
 
 declare global {
   interface Window {
@@ -11,17 +11,27 @@ declare global {
   }
 }
 
-type Filters = {
+type MarkerFilters = {
   entry: boolean;
   photo: boolean;
   keydate: boolean;
 };
 
 const MapPage: React.FC = () => {
-  const [markers, setMarkers] = React.useState<MapMarker[]>([]);
-  const [filters, setFilters] = React.useState<Filters>({ entry: true, photo: true, keydate: true });
+  const { mapItems, mapLoading, mapError, refreshMap, filters: timelineFilters } = useTimelineStore((state) => ({
+    mapItems: state.mapItems,
+    mapLoading: state.mapLoading,
+    mapError: state.mapError,
+    refreshMap: state.refreshMap,
+    filters: state.filters,
+  }));
+  const { q, type, tag } = timelineFilters;
+  const [markerFilters, setMarkerFilters] = React.useState<MarkerFilters>({ entry: true, photo: true, keydate: true });
   const [geoLoaded, setGeoLoaded] = React.useState(false);
   const [mapReady, setMapReady] = React.useState(false);
+  const [scriptError, setScriptError] = React.useState<string | null>(null);
+  const [geoError, setGeoError] = React.useState<string | null>(null);
+  const [buildingMarkers, setBuildingMarkers] = React.useState(false);
   const mapRef = React.useRef<any>(null);
   const markerInstancesRef = React.useRef<any[]>([]);
   const infoWindowRef = React.useRef<any>(null);
@@ -46,8 +56,10 @@ const MapPage: React.FC = () => {
       });
       console.log("GeoJSON loaded, provinces:", provinceFeaturesRef.current.size);
       setGeoLoaded(true);
+      setGeoError(null);
     } catch (err) {
       console.error("Failed to load geojson", err);
+      setGeoError("省份边界加载失败，请刷新重试");
     }
   }, []);
 
@@ -113,74 +125,109 @@ const MapPage: React.FC = () => {
     visitedCodesRef.current.forEach((code) => drawProvince(code));
   }, [drawProvince]);
 
+  const markers = React.useMemo<MapMarker[]>(() => {
+    const parseCoords = (location?: string | null) => {
+      if (!location) return null;
+      const nums = (location.replace("，", ",").match(/-?\d+(?:\.\d+)?/g) || []).map(parseFloat);
+      if (nums.length < 2 || Number.isNaN(nums[0]) || Number.isNaN(nums[1])) return null;
+      let lat = nums[0];
+      let lng = nums[1];
+      if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) [lat, lng] = [lng, lat];
+      return { lat, lng };
+    };
+
+    const ms: MapMarker[] = [];
+    (mapItems || []).forEach((it) => {
+      const coords = parseCoords(it.location);
+      if (!coords) return;
+      ms.push({
+        id: it.id,
+        kind: it.type,
+        lat: coords.lat,
+        lng: coords.lng,
+        label: it.location || "",
+        timestamp: new Date(it.timestamp).toLocaleString(),
+        snippet: (it.content || it.caption || it.title || "").slice(0, 120),
+        image: it.image,
+      });
+    });
+    return ms;
+  }, [mapItems]);
+
   const buildMarkers = React.useCallback(
     async (data: MapMarker[]) => {
       if (!window.AMap || !mapRef.current) return;
+      setBuildingMarkers(true);
       const map = mapRef.current;
 
-      // 清除旧的标记
-      markerInstancesRef.current.forEach(m => m.setMap(null));
-      markerInstancesRef.current = [];
+      try {
+        markerInstancesRef.current.forEach((m) => m.setMap(null));
+        markerInstancesRef.current = [];
+        provincePolygonsRef.current.forEach((polys) => polys.forEach((p) => p.setMap(null)));
+        provincePolygonsRef.current.clear();
+        visitedCodesRef.current = new Set();
 
-      const markerInstances: any[] = [];
-      const geocoder = new window.AMap.Geocoder({ extensions: "all" });
-      const countCache: Record<string, number> = {};
+        const markerInstances: any[] = [];
+        const geocoder = new window.AMap.Geocoder({ extensions: "all" });
+        const countCache: Record<string, number> = {};
+        const geocodeTasks: Promise<void>[] = [];
 
-      const jitter = (lat: number, lng: number) => {
-        const key = `${Math.round(lat * 10)},${Math.round(lng * 10)}`;
-        const count = (countCache[key] || 0) + 1;
-        countCache[key] = count;
-        if (count > 1) {
-          const angle = count * 137.5 * (Math.PI / 180);
-          const radius = 0.012 * Math.sqrt(count);
-          const newLat = lat + radius * Math.cos(angle);
-          const newLng = lng + radius * Math.sin(angle) * 1.3;
-          return new window.AMap.LngLat(newLng, newLat);
-        }
-        return new window.AMap.LngLat(lng, lat);
-      };
+        const jitter = (lat: number, lng: number) => {
+          const key = `${Math.round(lat * 10)},${Math.round(lng * 10)}`;
+          const count = (countCache[key] || 0) + 1;
+          countCache[key] = count;
+          if (count > 1) {
+            const angle = count * 137.5 * (Math.PI / 180);
+            const radius = 0.012 * Math.sqrt(count);
+            const newLat = lat + radius * Math.cos(angle);
+            const newLng = lng + radius * Math.sin(angle) * 1.3;
+            return new window.AMap.LngLat(newLng, newLat);
+          }
+          return new window.AMap.LngLat(lng, lat);
+        };
 
-      const colorFor = (kind: string) => {
-        if (kind === "photo") return "rgba(140,170,255,0.9)";
-        if (kind === "keydate") return "#ff003c";
-        return "rgba(255,255,255,0.9)";
-      };
+        const colorFor = (kind: string) => {
+          if (kind === "photo") return "rgba(140,170,255,0.9)";
+          if (kind === "keydate") return "#ff003c";
+          return "rgba(255,255,255,0.9)";
+        };
 
-      const closeInfo = () => {
-        if (infoWindowRef.current) {
-          infoWindowRef.current.close();
-          infoWindowRef.current = null;
-        }
-      };
-      (window as any).closeInfoWindow = closeInfo;
+        const closeInfo = () => {
+          if (infoWindowRef.current) {
+            infoWindowRef.current.close();
+            infoWindowRef.current = null;
+          }
+        };
+        (window as any).closeInfoWindow = closeInfo;
 
-      for (const m of data) {
-        const pos = jitter(m.lat, m.lng);
-        let marker;
-        if (m.kind === "keydate") {
-          marker = new window.AMap.Marker({
-            position: pos,
-            anchor: "center",
-            zIndex: 300,
-            content: '<div class="keydate-pin"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.35-9.33-9.27C1.2 9.08 2.5 5.5 5.73 4.6c1.9-.52 3.61.22 4.77 1.7 1.16-1.48 2.87-2.22 4.77-1.7 3.23.89 4.53 4.48 3.06 7.13C19 16.65 12 21 12 21Z"/></svg></div>',
-            extData: { kind: m.kind },
-          });
-        } else {
-          marker = new window.AMap.CircleMarker({
-            center: pos,
-            radius: 3.6,
-            strokeColor: "rgba(0,0,0,0.4)",
-            strokeWeight: 0.6,
-            fillColor: colorFor(m.kind),
-            fillOpacity: 0.85,
-            zIndex: 80,
-            cursor: "pointer",
-            bubble: true,
-            extData: { kind: m.kind },
-          });
-        }
+        for (const m of data) {
+          const pos = jitter(m.lat, m.lng);
+          let marker;
+          if (m.kind === "keydate") {
+            marker = new window.AMap.Marker({
+              position: pos,
+              anchor: "center",
+              zIndex: 300,
+              content:
+                '<div class="keydate-pin"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.35-9.33-9.27C1.2 9.08 2.5 5.5 5.73 4.6c1.9-.52 3.61.22 4.77 1.7 1.16-1.48 2.87-2.22 4.77-1.7 3.23.89 4.53 4.48 3.06 7.13C19 16.65 12 21 12 21Z"/></svg></div>',
+              extData: { kind: m.kind },
+            });
+          } else {
+            marker = new window.AMap.CircleMarker({
+              center: pos,
+              radius: 3.6,
+              strokeColor: "rgba(0,0,0,0.4)",
+              strokeWeight: 0.6,
+              fillColor: colorFor(m.kind),
+              fillOpacity: 0.85,
+              zIndex: 80,
+              cursor: "pointer",
+              bubble: true,
+              extData: { kind: m.kind },
+            });
+          }
 
-        const contentHtml = `
+          const contentHtml = `
           <div class="amap-info-window-custom">
             <span class="info-close" onclick="closeInfoWindow()">×</span>
             <div class="info-time">${m.timestamp}</div>
@@ -190,41 +237,56 @@ const MapPage: React.FC = () => {
           </div>
         `;
 
-        marker.on("click", () => {
-          closeInfo();
-          const info = new window.AMap.InfoWindow({
-            isCustom: true,
-            content: contentHtml,
-            offset: new window.AMap.Pixel(0, -12),
-            autoMove: true,
+          marker.on("click", () => {
+            closeInfo();
+            const info = new window.AMap.InfoWindow({
+              isCustom: true,
+              content: contentHtml,
+              offset: new window.AMap.Pixel(0, -12),
+              autoMove: true,
+            });
+            info.open(map, pos);
+            infoWindowRef.current = info;
           });
-          info.open(map, pos);
-          infoWindowRef.current = info;
-        });
 
-        marker.setMap(map);
-        markerInstances.push(marker);
-
-        geocoder.getAddress([m.lng, m.lat], (_status: any, result: any) => {
-          const raw = result?.regeocode?.addressComponent?.adcode;
-          if (raw) {
-            const code = String(raw).slice(0, 2).padEnd(6, "0");
-            console.log("Geocoded:", m.label, "adcode:", raw, "province:", code);
-            const prevSize = visitedCodesRef.current.size;
-            visitedCodesRef.current.add(code);
-            if (visitedCodesRef.current.size > prevSize) {
-              console.log("New province added:", code, "Total provinces:", visitedCodesRef.current.size);
-              refreshProvinces();
-            }
+          marker.setMap(map);
+          if (!markerFilters[m.kind as keyof MarkerFilters]) {
+            marker.hide();
           }
-        });
-      }
-      markerInstancesRef.current = markerInstances;
-      if (markerInstances.length > 0) {
-        map.setFitView(null, false, [100, 60, 100, 60]);
+          markerInstances.push(marker);
+
+          geocodeTasks.push(
+            new Promise<void>((resolve) => {
+              geocoder.getAddress([m.lng, m.lat], (_status: any, result: any) => {
+                const raw = result?.regeocode?.addressComponent?.adcode;
+                if (raw) {
+                  const code = String(raw).slice(0, 2).padEnd(6, "0");
+                  console.log("Geocoded:", m.label, "adcode:", raw, "province:", code);
+                  const prevSize = visitedCodesRef.current.size;
+                  visitedCodesRef.current.add(code);
+                  if (visitedCodesRef.current.size > prevSize) {
+                    console.log("New province added:", code, "Total provinces:", visitedCodesRef.current.size);
+                    refreshProvinces();
+                  }
+                }
+                resolve();
+              });
+            })
+          );
+        }
+        markerInstancesRef.current = markerInstances;
+        if (markerInstances.length > 0) {
+          map.setFitView(null, false, [100, 60, 100, 60]);
+        }
+        if (geocodeTasks.length) {
+          await Promise.allSettled(geocodeTasks);
+          refreshProvinces();
+        }
+      } finally {
+        setBuildingMarkers(false);
       }
     },
-    [refreshProvinces]
+    [refreshProvinces, markerFilters]
   );
 
   const initMap = React.useCallback(
@@ -246,12 +308,12 @@ const MapPage: React.FC = () => {
     [buildMarkers]
   );
 
-  const toggleFilter = (kind: keyof Filters) => {
-    const next = { ...filters, [kind]: !filters[kind] };
-    setFilters(next);
+  const toggleFilter = (kind: keyof MarkerFilters) => {
+    const next = { ...markerFilters, [kind]: !markerFilters[kind] };
+    setMarkerFilters(next);
     markerInstancesRef.current.forEach((marker) => {
       const mkind = marker.getExtData()?.kind;
-      if (next[mkind as keyof Filters]) marker.show();
+      if (next[mkind as keyof MarkerFilters]) marker.show();
       else marker.hide();
     });
     document.getElementById(`filter-${kind}`)?.classList.toggle("is-off", !next[kind]);
@@ -261,6 +323,7 @@ const MapPage: React.FC = () => {
     return new Promise<void>((resolve, reject) => {
       if (window.AMap) {
         setMapReady(true);
+        setScriptError(null);
         resolve();
         return;
       }
@@ -271,6 +334,7 @@ const MapPage: React.FC = () => {
       script.async = true;
       script.onload = () => {
         setMapReady(true);
+        setScriptError(null);
         resolve();
       };
       script.onerror = (e) => reject(e);
@@ -282,7 +346,10 @@ const MapPage: React.FC = () => {
   React.useEffect(() => {
     loadScript()
       .then(() => console.log("AMap loaded"))
-      .catch((err) => console.error("AMap load failed", err));
+      .catch((err) => {
+        console.error("AMap load failed", err);
+        setScriptError("地图脚本加载失败，请刷新后重试");
+      });
   }, [loadScript]);
 
   // 2. 加载 GeoJSON
@@ -290,60 +357,69 @@ const MapPage: React.FC = () => {
     loadGeoJSON();
   }, [loadGeoJSON]);
 
-  // 3. 获取时间轴数据
+  // 3. 同步时间轴数据到地图（依赖全局筛选）
   React.useEffect(() => {
-    const parseCoords = (location?: string | null) => {
-      if (!location) return null;
-      const nums = (location.replace("，", ",").match(/-?\d+(?:\.\d+)?/g) || []).map(parseFloat);
-      if (nums.length < 2 || Number.isNaN(nums[0]) || Number.isNaN(nums[1])) return null;
-      let lat = nums[0];
-      let lng = nums[1];
-      if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) [lat, lng] = [lng, lat];
-      return { lat, lng };
+    refreshMap({ q, type, tag, per_page: 500 });
+  }, [refreshMap, q, type, tag]);
+
+  // 4. 页面可见时尝试刷新
+  React.useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refreshMap({ q, type, tag, per_page: 500 });
+      }
     };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [refreshMap, q, type, tag]);
 
-    fetchTimeline({ per_page: 500, type: "all" })
-      .then((data) => {
-        const items = data.items || [];
-        const ms: MapMarker[] = [];
-        items.forEach((it: TimelineItem) => {
-          const coords = parseCoords(it.location);
-          if (!coords) return;
-          ms.push({
-            id: it.id,
-            kind: it.type,
-            lat: coords.lat,
-            lng: coords.lng,
-            label: it.location || "",
-            timestamp: new Date(it.timestamp).toLocaleString(),
-            snippet: (it.content || it.caption || it.title || "").slice(0, 120),
-            image: it.image,
-          });
-        });
-        console.log("Timeline loaded, markers:", ms.length);
-        setMarkers(ms);
-      })
-      .catch((err) => {
-        console.error("Load timeline for map failed", err);
-      });
-  }, []);
-
-  // 4. 初始化地图（当 AMap、GeoJSON 和 markers 都准备好时）
+  // 5. 初始化地图（当 AMap、GeoJSON 和 markers 都准备好时）
   React.useEffect(() => {
     if (mapReady && window.AMap && geoLoaded && !mapInitialized.current) {
       initMap(markers);
     }
   }, [mapReady, markers, geoLoaded, initMap]);
 
-  // 5. markers 更新时刷新地图标记
+  // 6. markers 更新时刷新地图标记
   React.useEffect(() => {
     if (mapInitialized.current && window.AMap) {
       buildMarkers(markers);
     }
   }, [markers, buildMarkers]);
 
+  const statusStyle: React.CSSProperties = {
+    position: "fixed",
+    right: "18px",
+    bottom: "18px",
+    padding: "10px 12px",
+    borderRadius: "10px",
+    background: "rgba(18, 18, 18, 0.82)",
+    color: "#f1f1f1",
+    fontSize: "12px",
+    letterSpacing: "0.04em",
+    zIndex: 900,
+    lineHeight: 1.5,
+    boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+    maxWidth: "280px",
+  };
+  const errorStyle: React.CSSProperties = {
+    ...statusStyle,
+    background: "rgba(255, 71, 87, 0.92)",
+    color: "#fff",
+  };
+
   return (
     <>
+      {(mapLoading || buildingMarkers || !mapReady) && (
+        <div style={statusStyle} role="status">
+          {!mapReady ? "地图脚本加载中..." : mapLoading ? "正在获取最新数据..." : "正在刷新标记..."}
+        </div>
+      )}
+      {(mapError || scriptError || geoError) && (
+        <div style={errorStyle} role="alert">
+          {scriptError || geoError || mapError}
+        </div>
+      )}
       <div className="map-legend" aria-label="Legend for map markers">
         <div className="legend-item" id="filter-entry" onClick={() => toggleFilter("entry")}>
           <span className="map-dot entry"></span>TEXT

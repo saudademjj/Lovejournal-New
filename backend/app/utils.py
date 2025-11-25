@@ -97,7 +97,11 @@ class GeoHelper:
             if len(nums) < 2:
                 return None
             try:
-                return float(nums[0]), float(nums[1])
+                lat = float(nums[0])
+                lng = float(nums[1])
+                if abs(lat) > 90 and abs(lng) <= 90:
+                    lat, lng = lng, lat
+                return lat, lng
             except ValueError:
                 return None
 

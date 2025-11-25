@@ -27,6 +27,7 @@ class EntryBase(BaseModel):
     content: str
     created_at: Optional[datetime] = None
     location: Optional[str] = None
+    location_coords: Optional[str] = None
 
 
 class EntryCreate(EntryBase):
@@ -37,6 +38,7 @@ class EntryUpdate(BaseModel):
     content: Optional[str] = None
     created_at: Optional[datetime] = None
     location: Optional[str] = None
+    location_coords: Optional[str] = None
 
 
 class PhotoBase(BaseModel):
@@ -49,12 +51,14 @@ class KeyDateBase(BaseModel):
     title: str
     date: Optional[datetime] = None
     location: Optional[str] = None
+    location_coords: Optional[str] = None
 
 
 class KeyDateUpdate(BaseModel):
     title: Optional[str] = None
     date: Optional[datetime] = None
     location: Optional[str] = None
+    location_coords: Optional[str] = None
 
 
 class TimelineEntry(BaseModel):
