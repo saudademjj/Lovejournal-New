@@ -1,12 +1,9 @@
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..database import get_session
-from ..models import Entry, KeyDate, Photo
 from ..schemas import MapMarker, MapResponse
-from ..utils import GeoHelper
 from .timeline import build_timeline
 
 router = APIRouter(prefix="/api", tags=["map"])
@@ -45,7 +42,7 @@ async def get_map(
     markers: list[MapMarker] = []
 
     # 使用时间轴构建的数据，统一过滤逻辑
-    timeline = await build_timeline(session, "", "all", "")
+    timeline, _ = await build_timeline(session, "", "all", "", page=1, per_page=500)
     for node in timeline:
         loc_text = node.location
         coords = _extract_coords(loc_text)
