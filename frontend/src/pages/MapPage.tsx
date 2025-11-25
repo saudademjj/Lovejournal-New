@@ -20,6 +20,8 @@ type Filters = {
 const MapPage: React.FC = () => {
   const [markers, setMarkers] = React.useState<MapMarker[]>([]);
   const [filters, setFilters] = React.useState<Filters>({ entry: true, photo: true, keydate: true });
+  const [geoLoaded, setGeoLoaded] = React.useState(false);
+  const [mapReady, setMapReady] = React.useState(false);
   const mapRef = React.useRef<any>(null);
   const markerInstancesRef = React.useRef<any[]>([]);
   const infoWindowRef = React.useRef<any>(null);
@@ -42,7 +44,8 @@ const MapPage: React.FC = () => {
         }
         provinceFeaturesRef.current.get(normalized)!.push(f);
       });
-      console.log("GeoJSON loaded:", provinceFeaturesRef.current.size, "provinces");
+      console.log("GeoJSON loaded, provinces:", provinceFeaturesRef.current.size);
+      setGeoLoaded(true);
     } catch (err) {
       console.error("Failed to load geojson", err);
     }
@@ -54,10 +57,10 @@ const MapPage: React.FC = () => {
       if (provincePolygonsRef.current.has(adcode)) return;
       const feats = provinceFeaturesRef.current.get(adcode);
       if (!feats || !feats.length) {
-        console.log("No features for province:", adcode);
+        console.warn("No features for province:", adcode);
         return;
       }
-      console.log("Drawing province:", adcode, feats.length, "features");
+      console.log("Drawing province:", adcode, "features:", feats.length);
       const polys: any[] = [];
       feats.forEach((f) => {
         const geom = f.geometry || {};
@@ -114,6 +117,11 @@ const MapPage: React.FC = () => {
     async (data: MapMarker[]) => {
       if (!window.AMap || !mapRef.current) return;
       const map = mapRef.current;
+
+      // 清除旧的标记
+      markerInstancesRef.current.forEach(m => m.setMap(null));
+      markerInstancesRef.current = [];
+
       const markerInstances: any[] = [];
       const geocoder = new window.AMap.Geocoder({ extensions: "all" });
       const countCache: Record<string, number> = {};
@@ -145,8 +153,6 @@ const MapPage: React.FC = () => {
         }
       };
       (window as any).closeInfoWindow = closeInfo;
-
-      await loadGeoJSON();
 
       for (const m of data) {
         const pos = jitter(m.lat, m.lng);
@@ -203,11 +209,12 @@ const MapPage: React.FC = () => {
           const raw = result?.regeocode?.addressComponent?.adcode;
           if (raw) {
             const code = String(raw).slice(0, 2).padEnd(6, "0");
-            const wasNew = !visitedCodesRef.current.has(code);
+            console.log("Geocoded:", m.label, "adcode:", raw, "province:", code);
+            const prevSize = visitedCodesRef.current.size;
             visitedCodesRef.current.add(code);
-            if (wasNew) {
-              console.log("New province detected:", code);
-              drawProvince(code);
+            if (visitedCodesRef.current.size > prevSize) {
+              console.log("New province added:", code, "Total provinces:", visitedCodesRef.current.size);
+              refreshProvinces();
             }
           }
         });
@@ -217,14 +224,13 @@ const MapPage: React.FC = () => {
         map.setFitView(null, false, [100, 60, 100, 60]);
       }
     },
-    [loadGeoJSON, drawProvince]
+    [refreshProvinces]
   );
 
   const initMap = React.useCallback(
     (data: MapMarker[]) => {
       if (!window.AMap || mapInitialized.current) return;
       console.log("Initializing map with", data.length, "markers");
-      mapInitialized.current = true;
       window._AMapSecurityConfig = { securityJsCode: AMAP_JS_CODE };
       const map = new window.AMap.Map("map", {
         viewMode: "2D",
@@ -234,6 +240,7 @@ const MapPage: React.FC = () => {
         pitch: 0,
       });
       mapRef.current = map;
+      mapInitialized.current = true;
       buildMarkers(data);
     },
     [buildMarkers]
@@ -253,23 +260,41 @@ const MapPage: React.FC = () => {
   const loadScript = React.useCallback(() => {
     return new Promise<void>((resolve, reject) => {
       if (window.AMap) {
+        setMapReady(true);
         resolve();
         return;
       }
+      // 安全码配置
       (window as any)._AMapSecurityConfig = { securityJsCode: AMAP_JS_CODE };
       const script = document.createElement("script");
       script.src = `https://webapi.amap.com/maps?v=2.0&key=${AMAP_JS_KEY}&plugin=AMap.Geocoder`;
       script.async = true;
-      script.onload = () => resolve();
+      script.onload = () => {
+        setMapReady(true);
+        resolve();
+      };
       script.onerror = (e) => reject(e);
       document.body.appendChild(script);
     });
   }, []);
 
+  // 1. 加载高德地图脚本
+  React.useEffect(() => {
+    loadScript()
+      .then(() => console.log("AMap loaded"))
+      .catch((err) => console.error("AMap load failed", err));
+  }, [loadScript]);
+
+  // 2. 加载 GeoJSON
+  React.useEffect(() => {
+    loadGeoJSON();
+  }, [loadGeoJSON]);
+
+  // 3. 获取时间轴数据
   React.useEffect(() => {
     const parseCoords = (location?: string | null) => {
       if (!location) return null;
-      const nums = (location.replace("，", ",").match(/-?\\d+(?:\\.\\d+)?/g) || []).map(parseFloat);
+      const nums = (location.replace("，", ",").match(/-?\d+(?:\.\d+)?/g) || []).map(parseFloat);
       if (nums.length < 2 || Number.isNaN(nums[0]) || Number.isNaN(nums[1])) return null;
       let lat = nums[0];
       let lng = nums[1];
@@ -295,7 +320,7 @@ const MapPage: React.FC = () => {
             image: it.image,
           });
         });
-        console.log("Timeline loaded:", ms.length, "markers");
+        console.log("Timeline loaded, markers:", ms.length);
         setMarkers(ms);
       })
       .catch((err) => {
@@ -303,15 +328,19 @@ const MapPage: React.FC = () => {
       });
   }, []);
 
+  // 4. 初始化地图（当 AMap、GeoJSON 和 markers 都准备好时）
   React.useEffect(() => {
-    if (markers.length === 0) return;
-    loadScript()
-      .then(() => {
-        console.log("AMap loaded");
-        initMap(markers);
-      })
-      .catch((err) => console.error("AMap load failed", err));
-  }, [markers, loadScript, initMap]);
+    if (mapReady && window.AMap && geoLoaded && !mapInitialized.current) {
+      initMap(markers);
+    }
+  }, [mapReady, markers, geoLoaded, initMap]);
+
+  // 5. markers 更新时刷新地图标记
+  React.useEffect(() => {
+    if (mapInitialized.current && window.AMap) {
+      buildMarkers(markers);
+    }
+  }, [markers, buildMarkers]);
 
   return (
     <>

@@ -22,7 +22,8 @@ def _extract_coords(location: str | None):
         return None
     import re
 
-    nums = re.findall(r"-?\\d+(?:\\.\\d+)?", str(location).replace("，", ","))
+    # Match signed decimals without double escaping so the pattern works as intended.
+    nums = re.findall(r"-?\d+(?:\.\d+)?", str(location).replace("，", ","))
     if len(nums) < 2:
         return None
     try:
