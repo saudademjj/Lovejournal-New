@@ -26,6 +26,7 @@ const MapPage: React.FC = () => {
   const provincePolygonsRef = React.useRef<Map<string, any[]>>(new Map());
   const visitedCodesRef = React.useRef<Set<string>>(new Set());
   const provinceFeaturesRef = React.useRef<Map<string, any[]>>(new Map());
+  const mapInitialized = React.useRef(false);
 
   const loadGeoJSON = React.useCallback(async () => {
     if (provinceFeaturesRef.current.size > 0) return;
@@ -41,6 +42,7 @@ const MapPage: React.FC = () => {
         }
         provinceFeaturesRef.current.get(normalized)!.push(f);
       });
+      console.log("GeoJSON loaded:", provinceFeaturesRef.current.size, "provinces");
     } catch (err) {
       console.error("Failed to load geojson", err);
     }
@@ -48,9 +50,14 @@ const MapPage: React.FC = () => {
 
   const drawProvince = React.useCallback(
     (adcode: string) => {
-      if (!window.AMap || provincePolygonsRef.current.has(adcode)) return;
+      if (!window.AMap || !mapRef.current) return;
+      if (provincePolygonsRef.current.has(adcode)) return;
       const feats = provinceFeaturesRef.current.get(adcode);
-      if (!feats || !feats.length) return;
+      if (!feats || !feats.length) {
+        console.log("No features for province:", adcode);
+        return;
+      }
+      console.log("Drawing province:", adcode, feats.length, "features");
       const polys: any[] = [];
       feats.forEach((f) => {
         const geom = f.geometry || {};
@@ -196,8 +203,12 @@ const MapPage: React.FC = () => {
           const raw = result?.regeocode?.addressComponent?.adcode;
           if (raw) {
             const code = String(raw).slice(0, 2).padEnd(6, "0");
+            const wasNew = !visitedCodesRef.current.has(code);
             visitedCodesRef.current.add(code);
-            refreshProvinces();
+            if (wasNew) {
+              console.log("New province detected:", code);
+              drawProvince(code);
+            }
           }
         });
       }
@@ -206,12 +217,14 @@ const MapPage: React.FC = () => {
         map.setFitView(null, false, [100, 60, 100, 60]);
       }
     },
-    [loadGeoJSON, refreshProvinces]
+    [loadGeoJSON, drawProvince]
   );
 
   const initMap = React.useCallback(
     (data: MapMarker[]) => {
-      if (!window.AMap) return;
+      if (!window.AMap || mapInitialized.current) return;
+      console.log("Initializing map with", data.length, "markers");
+      mapInitialized.current = true;
       window._AMapSecurityConfig = { securityJsCode: AMAP_JS_CODE };
       const map = new window.AMap.Map("map", {
         viewMode: "2D",
@@ -243,7 +256,6 @@ const MapPage: React.FC = () => {
         resolve();
         return;
       }
-      // 安全码配置
       (window as any)._AMapSecurityConfig = { securityJsCode: AMAP_JS_CODE };
       const script = document.createElement("script");
       script.src = `https://webapi.amap.com/maps?v=2.0&key=${AMAP_JS_KEY}&plugin=AMap.Geocoder`;
@@ -255,7 +267,6 @@ const MapPage: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
-    // 前端直接从时间轴构建地图点，避免后端解析差异
     const parseCoords = (location?: string | null) => {
       if (!location) return null;
       const nums = (location.replace("，", ",").match(/-?\\d+(?:\\.\\d+)?/g) || []).map(parseFloat);
@@ -284,6 +295,7 @@ const MapPage: React.FC = () => {
             image: it.image,
           });
         });
+        console.log("Timeline loaded:", ms.length, "markers");
         setMarkers(ms);
       })
       .catch((err) => {
@@ -292,8 +304,12 @@ const MapPage: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
+    if (markers.length === 0) return;
     loadScript()
-      .then(() => initMap(markers))
+      .then(() => {
+        console.log("AMap loaded");
+        initMap(markers);
+      })
       .catch((err) => console.error("AMap load failed", err));
   }, [markers, loadScript, initMap]);
 
