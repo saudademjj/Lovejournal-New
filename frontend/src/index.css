@@ -1,0 +1,28 @@
+/* Legacy styles preserved to keep the original visual language */
+@import "./styles/style.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #ffffff;
+  background-color: #030303;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  background-color: #030303;
+}
+
+/* Force timeline cells visible in SPA (animations handled differently) */
+body[data-page="index"] .time-wrapper,
+body[data-page="index"] .content-wrapper {
+  opacity: 1 !important;
+  transform: none !important;
+}
