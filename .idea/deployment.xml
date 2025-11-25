@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="root@100.87.125.127:22 password" exclude=".svn;.cvs;.idea;.DS_Store;.git;.hg;*.hprof;*.pyc;node_modules;.venv;.env;__pycache__;uploads" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true">
+    <serverData>
+      <paths name="root@100.87.125.127:22 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/opt/lovejournal-new" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath path="/opt/lovejournal-new/backend/.venv" />
+            <excludedPath path="/opt/lovejournal-new/frontend/node_modules" />
+            <excludedPath path="/opt/lovejournal-new/backend/.env" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>
