@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String, Text, func
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -28,6 +28,8 @@ class Entry(Base, TimestampMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     tags: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
 
 
 class KeyDate(Base):
@@ -41,6 +43,8 @@ class KeyDate(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), server_default=func.now(), nullable=False, index=True
     )
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
 
 
 class Photo(Base, TimestampMixin):
@@ -51,6 +55,8 @@ class Photo(Base, TimestampMixin):
     caption: Mapped[str | None] = mapped_column(String(255), nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     tags: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
 
 
 class MetaKV(Base):

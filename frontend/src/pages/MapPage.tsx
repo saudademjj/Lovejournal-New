@@ -46,6 +46,7 @@ const MapPage: React.FC = () => {
   const infoWindowRef = React.useRef<any>(null);
   const provincePolygonsRef = React.useRef<Map<string, any[]>>(new Map());
   const visitedCodesRef = React.useRef<Set<string>>(new Set());
+  const provinceCacheRef = React.useRef<Map<string, string | null>>(new Map());
   const provinceFeaturesRef = React.useRef<Map<string, ProvinceFeature[]>>(new Map());
   const mapInitialized = React.useRef(false);
   const isInitialMount = React.useRef(true);
@@ -59,6 +60,24 @@ const MapPage: React.FC = () => {
       if (geom.type === "Polygon") return [geom.coordinates || []];
       return [];
     };
+
+    const simplifyRing = (ring: [number, number][], maxPoints = 140) => {
+      if (!ring || ring.length <= maxPoints) return ring;
+      const step = Math.ceil(ring.length / maxPoints);
+      const simplified: [number, number][] = [];
+      for (let i = 0; i < ring.length; i += step) {
+        simplified.push(ring[i]);
+      }
+      if (ring.length > 0 && simplified[simplified.length - 1] !== ring[ring.length - 1]) {
+        simplified.push(ring[ring.length - 1]);
+      }
+      return simplified;
+    };
+
+    const simplifyPolygons = (polys: NormalizedPolygon[]) =>
+      polys
+        .map((poly) => poly.map((ring) => simplifyRing(ring)))
+        .filter((poly) => poly.some((ring) => ring && ring.length >= 3));
 
     const calcBbox = (polys: NormalizedPolygon[]) => {
       let minLng = Number.POSITIVE_INFINITY;
@@ -95,7 +114,7 @@ const MapPage: React.FC = () => {
           const props = f.properties || {};
           const code = String(props.adcode || props.parent?.adcode || (props.acroutes || []).slice(-1)[0] || "");
           const normalized = code.slice(0, 2).padEnd(6, "0");
-          const polygons = normalizePolygons(f.geometry);
+          const polygons = simplifyPolygons(normalizePolygons(f.geometry));
           if (!polygons.length) return;
           const bbox = calcBbox(polygons);
           const list = provinceFeaturesRef.current.get(normalized) || [];
@@ -104,6 +123,7 @@ const MapPage: React.FC = () => {
         });
         if (provinceFeaturesRef.current.size > 0) {
           console.log("GeoJSON loaded from", src, "provinces:", provinceFeaturesRef.current.size);
+          provinceCacheRef.current.clear();
           setGeoLoaded(true);
           setGeoError(null);
           return;
@@ -145,16 +165,30 @@ const MapPage: React.FC = () => {
 
   const findProvinceByPoint = React.useCallback(
     (lng: number, lat: number) => {
+      const cacheKey = `${lng.toFixed(3)},${lat.toFixed(3)}`;
+      if (provinceCacheRef.current.has(cacheKey)) {
+        return provinceCacheRef.current.get(cacheKey) as string | null;
+      }
+
+      let matched: string | null = null;
       for (const [code, feats] of provinceFeaturesRef.current.entries()) {
+        let hit = false;
         for (const feat of feats) {
           const [minLng, minLat, maxLng, maxLat] = feat.bbox;
           if (lng < minLng || lng > maxLng || lat < minLat || lat > maxLat) continue;
           for (const poly of feat.polygons) {
-            if (pointInPolygon([lng, lat], poly)) return code;
+            if (pointInPolygon([lng, lat], poly)) {
+              matched = code;
+              hit = true;
+              break;
+            }
           }
+          if (hit) break;
         }
+        if (matched) break;
       }
-      return null;
+      provinceCacheRef.current.set(cacheKey, matched);
+      return matched;
     },
     [pointInPolygon]
   );
@@ -227,6 +261,7 @@ const MapPage: React.FC = () => {
         provincePolygonsRef.current.forEach((polys) => polys.forEach((p) => p.setMap(null)));
         provincePolygonsRef.current.clear();
         visitedCodesRef.current = new Set();
+        provinceCacheRef.current.clear();
 
         const markerInstances: any[] = [];
         const countCache: Record<string, number> = {};
@@ -261,8 +296,14 @@ const MapPage: React.FC = () => {
         };
         (window as any).closeInfoWindow = closeInfo;
 
-        for (const m of data) {
+        const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        for (let idx = 0; idx < data.length; idx++) {
           if (buildSeqRef.current !== buildId) break;
+          if (idx && idx % 120 === 0) {
+            await pause();
+          }
+          const m = data[idx];
           const pos = jitter(m.lat, m.lng);
           let marker;
           if (m.kind === "keydate") {

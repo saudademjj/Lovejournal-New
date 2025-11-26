@@ -9,33 +9,17 @@ from ..database import get_session
 from ..map_version import get_map_version
 from ..models import Entry, KeyDate, Photo
 from ..schemas import MapMarker, MapResponse
+from ..utils import GeoHelper
 
 router = APIRouter(prefix="/api", tags=["map"])
 settings = get_settings()
+geo_helper = GeoHelper(settings.amap_key)
 
 
-def _extract_coords(location: str | None):
-    """
-    Robustly parse 'lat,lng ...' with minimal assumptions; no network requests.
-    Returns (lat, lng) or None.
-    """
-    if not location:
-        return None
-    import re
-
-    # Match signed decimals without double escaping so the pattern works as intended.
-    nums = re.findall(r"-?\d+(?:\.\d+)?", str(location).replace("，", ","))
-    if len(nums) < 2:
-        return None
-    try:
-        lat = float(nums[0])
-        lng = float(nums[1])
-        # swap if reversed
-        if abs(lat) > 90 and abs(lng) <= 90:
-            lat, lng = lng, lat
-        return lat, lng
-    except ValueError:
-        return None
+def _resolve_coords(location: str | None, lat: float | None, lng: float | None):
+    if lat is not None and lng is not None:
+        return float(lat), float(lng)
+    return geo_helper.parse_coords_from_location(location)
 
 
 def _tag_clause(column, tag: str):
@@ -66,20 +50,27 @@ async def _build_map_markers(
         location_col,
         tags_col,
         image_col,
+        lat_col,
+        lng_col,
     ):
-        stmt = (
-            select(
-                model.id.label("id"),
-                literal(type_label).label("type"),
-                ts_col.label("timestamp"),
-                content_col.label("content"),
-                caption_col.label("caption"),
-                title_col.label("title"),
-                location_col.label("location"),
-                tags_col.label("tags"),
-                image_col.label("image"),
+        stmt = select(
+            model.id.label("id"),
+            literal(type_label).label("type"),
+            ts_col.label("timestamp"),
+            content_col.label("content"),
+            caption_col.label("caption"),
+            title_col.label("title"),
+            location_col.label("location"),
+            tags_col.label("tags"),
+            image_col.label("image"),
+            lat_col.label("lat"),
+            lng_col.label("lng"),
+        ).where(
+            or_(
+                func.length(func.trim(location_col)) > 0,
+                lat_col.is_not(None),
+                lng_col.is_not(None),
             )
-            .where(func.length(func.trim(location_col)) > 0)
         )
         if search:
             like = f"%{search}%"
@@ -106,6 +97,8 @@ async def _build_map_markers(
             Entry.location,
             Entry.tags,
             literal(None),
+            Entry.lat,
+            Entry.lng,
         )
 
     if include_keydate:
@@ -119,6 +112,8 @@ async def _build_map_markers(
             KeyDate.location,
             KeyDate.tags,
             literal(None),
+            KeyDate.lat,
+            KeyDate.lng,
         )
 
     if include_photo:
@@ -132,6 +127,8 @@ async def _build_map_markers(
             Photo.location,
             Photo.tags,
             (literal("/uploads/") + Photo.filename),
+            Photo.lat,
+            Photo.lng,
         )
 
     if not selects:
@@ -144,7 +141,7 @@ async def _build_map_markers(
 
     markers: list[MapMarker] = []
     for row in rows:
-        coords = _extract_coords(row.get("location"))
+        coords = _resolve_coords(row.get("location"), row.get("lat"), row.get("lng"))
         if not coords:
             continue
         lat, lng = coords

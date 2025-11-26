@@ -1,8 +1,11 @@
 import axios from "axios";
 import { API_BASE_URL } from "./config";
+import { emitAppEvent } from "./eventBus";
 import { MapResponse, TimelineResponse, User } from "./types";
 
 const TOKEN_KEY = "lovejournal_token";
+
+const invalidateMap = () => emitAppEvent({ type: "map:invalidate" });
 
 export const getStoredToken = () => localStorage.getItem(TOKEN_KEY);
 export const setStoredToken = (token: string | null) => {
@@ -60,6 +63,7 @@ export async function fetchTags() {
 
 export async function createEntry(payload: { content: string; created_at?: string; location?: string; location_coords?: string }) {
   const res = await api.post("/entries", payload);
+  invalidateMap();
   return res.data;
 }
 
@@ -68,15 +72,18 @@ export async function updateEntry(
   payload: { content?: string; created_at?: string; location?: string; location_coords?: string }
 ) {
   const res = await api.put(`/entries/${id}`, payload);
+  invalidateMap();
   return res.data;
 }
 
 export async function deleteEntry(id: number) {
   await api.delete(`/entries/${id}`);
+  invalidateMap();
 }
 
 export async function createKeydate(payload: { title: string; date?: string; location?: string; location_coords?: string }) {
   const res = await api.post("/keydates", payload);
+  invalidateMap();
   return res.data;
 }
 
@@ -85,11 +92,13 @@ export async function updateKeydate(
   payload: { title?: string; date?: string; location?: string; location_coords?: string }
 ) {
   const res = await api.put(`/keydates/${id}`, payload);
+  invalidateMap();
   return res.data;
 }
 
 export async function deleteKeydate(id: number) {
   await api.delete(`/keydates/${id}`);
+  invalidateMap();
 }
 
 export async function createPhoto(payload: {
@@ -106,6 +115,7 @@ export async function createPhoto(payload: {
   if (payload.location_coords) form.append("location_coords", payload.location_coords);
   form.append("file", payload.file);
   const res = await api.post("/photos", form);
+  invalidateMap();
   return res.data;
 }
 
@@ -120,11 +130,13 @@ export async function updatePhoto(
   if (payload.location_coords) form.append("location_coords", payload.location_coords);
   if (payload.file) form.append("file", payload.file);
   const res = await api.put(`/photos/${id}`, form);
+  invalidateMap();
   return res.data;
 }
 
 export async function deletePhoto(id: number) {
   await api.delete(`/photos/${id}`);
+  invalidateMap();
 }
 
 export async function fetchMap(params?: { q?: string; type?: string; tag?: string; limit?: number; since_version?: number }) {
