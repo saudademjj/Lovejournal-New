@@ -49,21 +49,46 @@ def _timeline_entry_from_entry(entry: Entry) -> TimelineEntry:
 
 
 
-async def _assign_geo_info(target, geo_helper: GeoHelper, location_text: str | None, source_location: str | None = None):
-    query_text_raw = source_location if source_location else location_text
-    query_text = (query_text_raw or "").strip()
-    parsed_coords = geo_helper.parse_coords_from_location(location_text) if location_text else None
-    geo_info = await geo_helper.resolve_location(query_text) if query_text else None
+async def _assign_geo_info(
+    target,
+    geo_helper: GeoHelper,
+    location_text: str | None,
+    source_location: str | None = None,
+    *,
+    update_requested: bool = True,
+    allow_clear: bool = True,
+):
+    if not update_requested:
+        return
 
-    if parsed_coords:
-        target.lat, target.lng = parsed_coords[0], parsed_coords[1]
-    elif geo_info:
-        target.lat, target.lng = geo_info[0], geo_info[1]
+    prev_lat, prev_lng, prev_adcode = target.lat, target.lng, getattr(target, "adcode", None)
+    raw_text = source_location if source_location is not None else location_text
+    cleaned = (raw_text or "").strip()
+
+    # 用户明确清空位置
+    if raw_text is not None and cleaned == "":
+        if allow_clear:
+            target.lat = None
+            target.lng = None
+            target.adcode = None
+        return
+
+    lat, lng, adcode = prev_lat, prev_lng, prev_adcode
+    geo_info = await geo_helper.resolve_location(cleaned) if cleaned else None
+    if geo_info:
+        lat, lng, adcode = geo_info
     else:
-        target.lat = None
-        target.lng = None
+        coords_only = geo_helper.parse_coords_from_location(cleaned) if cleaned else None
+        if coords_only:
+            lat, lng = coords_only[0], coords_only[1]
+            adcode = await geo_helper.reverse_geocode(lat, lng)
 
-    target.adcode = geo_info[2] if geo_info else None
+    if lat is not None and lng is not None and not adcode:
+        adcode = await geo_helper.reverse_geocode(lat, lng) or adcode
+
+    target.lat = lat
+    target.lng = lng
+    target.adcode = adcode
 
 @router.post("/entries", response_model=TimelineEntry, status_code=status.HTTP_201_CREATED)
 async def create_entry(
@@ -114,8 +139,16 @@ async def update_entry(
     if payload.created_at is not None:
         entry.created_at = payload.created_at
     entry.tags = _format_tags(entry.content, updated_location)
-    if location_updated:
-        await _assign_geo_info(entry, geo_helper, updated_location, payload.location)
+    needs_adcode_backfill = not location_updated and entry.lat is not None and entry.lng is not None and not entry.adcode
+    if location_updated or needs_adcode_backfill:
+        await _assign_geo_info(
+            entry,
+            geo_helper,
+            updated_location,
+            payload.location,
+            update_requested=True,
+            allow_clear=location_updated,
+        )
     await session.commit()
     await session.refresh(entry)
     await bump_map_version(session)
@@ -188,8 +221,16 @@ async def update_keydate(
     if payload.date is not None:
         kd.date = payload.date
     kd.tags = _format_tags(kd.title, updated_location)
-    if location_updated:
-        await _assign_geo_info(kd, geo_helper, updated_location, payload.location)
+    needs_adcode_backfill = not location_updated and kd.lat is not None and kd.lng is not None and not kd.adcode
+    if location_updated or needs_adcode_backfill:
+        await _assign_geo_info(
+            kd,
+            geo_helper,
+            updated_location,
+            payload.location,
+            update_requested=True,
+            allow_clear=location_updated,
+        )
     await session.commit()
     await session.refresh(kd)
     await bump_map_version(session)
@@ -290,8 +331,16 @@ async def update_photo(
     dt = parse_datetime(custom_date)
     photo.caption = caption or photo.caption
     photo.created_at = dt or photo.created_at
-    if location_updated:
-        await _assign_geo_info(photo, geo_helper, merged_location, location)
+    needs_adcode_backfill = not location_updated and photo.lat is not None and photo.lng is not None and not photo.adcode
+    if location_updated or needs_adcode_backfill:
+        await _assign_geo_info(
+            photo,
+            geo_helper,
+            merged_location,
+            location,
+            update_requested=True,
+            allow_clear=location_updated,
+        )
 
     upload_dir = _ensure_upload_dir()
     if file and file.filename:
