@@ -108,13 +108,25 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
     const forceRefresh = (filters as { force?: boolean }).force || false;
     const requestKey = `${merged.q || ""}|${merged.type}|${merged.tag}|${perPage}`;
     const { mapLoading, mapRequestKey, mapDataKey } = get();
+
+    // 调试日志
+    console.log("[refreshMap] force:", forceRefresh, "requestKey:", requestKey, "cached:", mapDataKey === requestKey);
+
+    // 如果数据已缓存且不强制刷新，跳过
     if (!forceRefresh && mapDataKey === requestKey && !mapLoading) {
+      console.log("[refreshMap] Using cached data, skipping refresh");
       return;
     }
+
+    // 如果相同请求正在进行，跳过
     if (mapLoading && mapRequestKey === requestKey) {
+      console.log("[refreshMap] Same request in progress, skipping");
       return;
     }
+
+    console.log("[refreshMap] Fetching map data...");
     set({ mapLoading: true, mapError: null, mapRequestKey: requestKey });
+
     try {
       const res = await fetchTimeline({
         q: merged.q,
@@ -123,11 +135,18 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
         page: 1,
         per_page: perPage,
       });
+
+      // 检查请求是否已过期
       if (get().mapRequestKey !== requestKey) {
+        console.log("[refreshMap] Request outdated, ignoring results");
         return;
       }
+
+      const items = Array.isArray(res?.items) ? res.items : [];
+      console.log("[refreshMap] Successfully loaded", items.length, "items");
+
       set({
-        mapItems: Array.isArray(res?.items) ? res.items : [],
+        mapItems: items,
         mapLoading: false,
         mapError: null,
         mapRequestKey: null,
@@ -135,6 +154,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
       });
     } catch (e) {
       if (get().mapRequestKey === requestKey) {
+        console.error("[refreshMap] Failed to load map data:", e);
         set({ mapLoading: false, mapError: "地图数据加载失败", mapRequestKey: null, mapDataKey: null });
       }
     }
