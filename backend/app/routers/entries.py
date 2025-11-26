@@ -62,7 +62,7 @@ async def _assign_geo_info(
         return
 
     prev_lat, prev_lng, prev_adcode = target.lat, target.lng, getattr(target, "adcode", None)
-    raw_text = source_location if source_location is not None else location_text
+    raw_text = location_text if location_text else source_location
     cleaned = (raw_text or "").strip()
 
     # 用户明确清空位置
