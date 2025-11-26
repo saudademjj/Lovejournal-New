@@ -202,7 +202,6 @@ const TimelinePage: React.FC = () => {
         }
       }
       await init(filters);
-      emitAppEvent({ type: "map:invalidate" });
       closeModal();
     } catch (err: any) {
       setError(err?.response?.data?.detail || err?.message || "保存失败，请稍后重试");
@@ -217,7 +216,6 @@ const TimelinePage: React.FC = () => {
     if (item.type === "keydate") await deleteKeydate(item.id);
     if (item.type === "photo") await deletePhoto(item.id);
     await init(filters);
-    emitAppEvent({ type: "map:invalidate" });
   };
 
   return (

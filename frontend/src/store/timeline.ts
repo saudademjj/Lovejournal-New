@@ -135,17 +135,6 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
         return;
       }
 
-      if (res?.unchanged && mapVersion !== null && res.version === mapVersion) {
-        console.log("[refreshMap] Map data unchanged, skip update");
-        set({
-          mapLoading: false,
-          mapError: null,
-          mapRequestKey: null,
-          mapDataKey: `${requestKey}|v${mapVersion}`,
-        });
-        return;
-      }
-
       const items = Array.isArray(res?.markers) ? res.markers : [];
       console.log("[refreshMap] Successfully loaded", items.length, "map markers, version:", res?.version);
 

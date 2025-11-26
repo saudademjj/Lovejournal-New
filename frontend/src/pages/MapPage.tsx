@@ -486,11 +486,9 @@ const MapPage: React.FC = () => {
 
   // 7. mapItems 更新时强制刷新地图标记（确保新数据同步）
   React.useEffect(() => {
-    if (mapInitialized.current && window.AMap) {
-      console.log("mapItems changed, rebuilding markers. Count:", markers.length);
-      buildMarkers(markers);
-    }
-  }, [mapItems, buildMarkers]);
+    if (!mapInitialized.current || !window.AMap) return;
+    buildMarkers(markers);
+  }, [mapItems]);
 
   // 8. markers 筛选器变化时更新标记可见性
   React.useEffect(() => {
