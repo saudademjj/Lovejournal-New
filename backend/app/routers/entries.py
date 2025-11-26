@@ -4,7 +4,6 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -50,10 +49,21 @@ def _timeline_entry_from_entry(entry: Entry) -> TimelineEntry:
 
 
 
-def _assign_coords(target, geo_helper: GeoHelper, location_text: str | None):
-    coords = geo_helper.parse_coords_from_location(location_text)
-    target.lat = coords[0] if coords else None
-    target.lng = coords[1] if coords else None
+async def _assign_geo_info(target, geo_helper: GeoHelper, location_text: str | None, source_location: str | None = None):
+    query_text_raw = source_location if source_location else location_text
+    query_text = (query_text_raw or "").strip()
+    parsed_coords = geo_helper.parse_coords_from_location(location_text) if location_text else None
+    geo_info = await geo_helper.resolve_location(query_text) if query_text else None
+
+    if parsed_coords:
+        target.lat, target.lng = parsed_coords[0], parsed_coords[1]
+    elif geo_info:
+        target.lat, target.lng = geo_info[0], geo_info[1]
+    else:
+        target.lat = None
+        target.lng = None
+
+    target.adcode = geo_info[2] if geo_info else None
 
 @router.post("/entries", response_model=TimelineEntry, status_code=status.HTTP_201_CREATED)
 async def create_entry(
@@ -71,7 +81,7 @@ async def create_entry(
         location=location,
         tags=tags,
     )
-    _assign_coords(entry, geo_helper, location)
+    await _assign_geo_info(entry, geo_helper, location, payload.location)
     session.add(entry)
     await session.commit()
     await session.refresh(entry)
@@ -92,7 +102,8 @@ async def update_entry(
         raise HTTPException(status_code=404, detail="Entry not found")
     geo_helper = await _get_geo_helper(request)
     updated_location = entry.location
-    if payload.location is not None or payload.location_coords is not None:
+    location_updated = payload.location is not None or payload.location_coords is not None
+    if location_updated:
         updated_location = await geo_helper.merge_location_and_coords(
             payload.location if payload.location is not None else entry.location,
             payload.location_coords,
@@ -103,7 +114,8 @@ async def update_entry(
     if payload.created_at is not None:
         entry.created_at = payload.created_at
     entry.tags = _format_tags(entry.content, updated_location)
-    _assign_coords(entry, geo_helper, updated_location)
+    if location_updated:
+        await _assign_geo_info(entry, geo_helper, updated_location, payload.location)
     await session.commit()
     await session.refresh(entry)
     await bump_map_version(session)
@@ -136,7 +148,7 @@ async def create_keydate(
     location = await geo_helper.merge_location_and_coords(payload.location, payload.location_coords)
     date = payload.date or datetime.now()
     kd = KeyDate(title=payload.title, date=date, location=location, tags=_format_tags(payload.title, location))
-    _assign_coords(kd, geo_helper, location)
+    await _assign_geo_info(kd, geo_helper, location, payload.location)
     session.add(kd)
     await session.commit()
     await session.refresh(kd)
@@ -164,7 +176,8 @@ async def update_keydate(
         raise HTTPException(status_code=404, detail="Key date not found")
     geo_helper = await _get_geo_helper(request)
     updated_location = kd.location
-    if payload.location is not None or payload.location_coords is not None:
+    location_updated = payload.location is not None or payload.location_coords is not None
+    if location_updated:
         updated_location = await geo_helper.merge_location_and_coords(
             payload.location if payload.location is not None else kd.location,
             payload.location_coords,
@@ -175,7 +188,8 @@ async def update_keydate(
     if payload.date is not None:
         kd.date = payload.date
     kd.tags = _format_tags(kd.title, updated_location)
-    _assign_coords(kd, geo_helper, updated_location)
+    if location_updated:
+        await _assign_geo_info(kd, geo_helper, updated_location, payload.location)
     await session.commit()
     await session.refresh(kd)
     await bump_map_version(session)
@@ -235,7 +249,7 @@ async def create_photo(
         location=merged_location,
         tags=_format_tags(caption, merged_location),
     )
-    _assign_coords(photo, geo_helper, merged_location)
+    await _assign_geo_info(photo, geo_helper, merged_location, location)
     session.add(photo)
     await session.commit()
     await session.refresh(photo)
@@ -268,12 +282,16 @@ async def update_photo(
         raise HTTPException(status_code=404, detail="Photo not found")
 
     geo_helper = await _get_geo_helper(request)
-    merged_location = await geo_helper.merge_location_and_coords(location, location_coords)
+    location_updated = location is not None or location_coords is not None
+    merged_location = photo.location
+    if location_updated:
+        merged_location = await geo_helper.merge_location_and_coords(location, location_coords)
+        photo.location = merged_location
     dt = parse_datetime(custom_date)
     photo.caption = caption or photo.caption
     photo.created_at = dt or photo.created_at
-    photo.location = merged_location
-    _assign_coords(photo, geo_helper, merged_location)
+    if location_updated:
+        await _assign_geo_info(photo, geo_helper, merged_location, location)
 
     upload_dir = _ensure_upload_dir()
     if file and file.filename:
