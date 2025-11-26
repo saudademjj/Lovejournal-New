@@ -49,6 +49,12 @@ def _timeline_entry_from_entry(entry: Entry) -> TimelineEntry:
     )
 
 
+
+def _assign_coords(target, geo_helper: GeoHelper, location_text: str | None):
+    coords = geo_helper.parse_coords_from_location(location_text)
+    target.lat = coords[0] if coords else None
+    target.lng = coords[1] if coords else None
+
 @router.post("/entries", response_model=TimelineEntry, status_code=status.HTTP_201_CREATED)
 async def create_entry(
     payload: EntryCreate,
@@ -59,7 +65,13 @@ async def create_entry(
     geo_helper = await _get_geo_helper(request)
     location = await geo_helper.merge_location_and_coords(payload.location, payload.location_coords)
     tags = _format_tags(payload.content, location)
-    entry = Entry(content=payload.content, created_at=payload.created_at or datetime.now(), location=location, tags=tags)
+    entry = Entry(
+        content=payload.content,
+        created_at=payload.created_at or datetime.now(),
+        location=location,
+        tags=tags,
+    )
+    _assign_coords(entry, geo_helper, location)
     session.add(entry)
     await session.commit()
     await session.refresh(entry)
@@ -91,6 +103,7 @@ async def update_entry(
     if payload.created_at is not None:
         entry.created_at = payload.created_at
     entry.tags = _format_tags(entry.content, updated_location)
+    _assign_coords(entry, geo_helper, updated_location)
     await session.commit()
     await session.refresh(entry)
     await bump_map_version(session)
@@ -123,6 +136,7 @@ async def create_keydate(
     location = await geo_helper.merge_location_and_coords(payload.location, payload.location_coords)
     date = payload.date or datetime.now()
     kd = KeyDate(title=payload.title, date=date, location=location, tags=_format_tags(payload.title, location))
+    _assign_coords(kd, geo_helper, location)
     session.add(kd)
     await session.commit()
     await session.refresh(kd)
@@ -161,6 +175,7 @@ async def update_keydate(
     if payload.date is not None:
         kd.date = payload.date
     kd.tags = _format_tags(kd.title, updated_location)
+    _assign_coords(kd, geo_helper, updated_location)
     await session.commit()
     await session.refresh(kd)
     await bump_map_version(session)
@@ -220,6 +235,7 @@ async def create_photo(
         location=merged_location,
         tags=_format_tags(caption, merged_location),
     )
+    _assign_coords(photo, geo_helper, merged_location)
     session.add(photo)
     await session.commit()
     await session.refresh(photo)
@@ -257,6 +273,7 @@ async def update_photo(
     photo.caption = caption or photo.caption
     photo.created_at = dt or photo.created_at
     photo.location = merged_location
+    _assign_coords(photo, geo_helper, merged_location)
 
     upload_dir = _ensure_upload_dir()
     if file and file.filename:
