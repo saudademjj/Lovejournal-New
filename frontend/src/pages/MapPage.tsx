@@ -44,6 +44,7 @@ const MapPage: React.FC = () => {
   const visitedCodesRef = React.useRef<Set<string>>(new Set());
   const provinceFeaturesRef = React.useRef<Map<string, any[]>>(new Map());
   const mapInitialized = React.useRef(false);
+  const isInitialMount = React.useRef(true);
 
   const loadGeoJSON = React.useCallback(async () => {
     if (provinceFeaturesRef.current.size > 0) return;
@@ -386,7 +387,13 @@ const MapPage: React.FC = () => {
 
   // 3. 同步时间轴数据到地图（依赖全局筛选）
   React.useEffect(() => {
-    refreshMap({ q, type, tag, per_page: 500 });
+    // 首次挂载时强制刷新，确保获取最新数据
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      refreshMap({ q, type, tag, per_page: 500, force: true });
+    } else {
+      refreshMap({ q, type, tag, per_page: 500 });
+    }
   }, [refreshMap, q, type, tag]);
 
   // 4. 页面可见时尝试刷新
@@ -407,12 +414,26 @@ const MapPage: React.FC = () => {
     }
   }, [mapReady, geoLoaded, initMap]);
 
-  // 6. markers 更新时刷新地图标记
+  // 6. mapItems 更新时强制刷新地图标记（确保新数据同步）
   React.useEffect(() => {
-    if (mapInitialized.current && window.AMap) {
+    if (mapInitialized.current && window.AMap && markers.length > 0) {
+      console.log("mapItems changed, rebuilding markers. Count:", markers.length);
       buildMarkers(markers);
     }
-  }, [markers, buildMarkers]);
+  }, [mapItems, buildMarkers]);
+
+  // 7. markers 筛选器变化时更新标记可见性
+  React.useEffect(() => {
+    if (markerInstancesRef.current.length === 0) return;
+    markerInstancesRef.current.forEach((m) => {
+      const kind = m.getExtData()?.kind;
+      if (kind && markerFilters[kind as keyof MarkerFilters]) {
+        m.show();
+      } else {
+        m.hide();
+      }
+    });
+  }, [markerFilters]);
 
   const statusStyle: React.CSSProperties = {
     position: "fixed",
