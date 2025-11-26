@@ -70,13 +70,13 @@ async def analyze_and_fix_coordinates(dry_run: bool = True):
                 lat = record.lat
                 lng = record.lng
                 location = getattr(record, 'location', '') or ''
-                
+
                 # 检查是否需要交换
                 # 正确情况：lat 在 [-90, 90]，lng 在 [-180, 180]
                 # 错误情况：lat > 90 (实际是经度)
                 needs_fix = False
                 fix_reason = ""
-                
+
                 if lat is not None and lng is not None:
                     if abs(lat) > 90:
                         # lat 实际上是经度，需要交换
@@ -86,6 +86,16 @@ async def analyze_and_fix_coordinates(dry_run: bool = True):
                         # lng 超出范围，可能数据有问题
                         fix_reason = f"lng({lng}) 超出 ±180 范围，数据异常"
                         print(f"  ⚠️  异常数据 ID={record.id}: {fix_reason}")
+                    elif abs(lat) <= 90 and abs(lng) <=90:
+                        is_lat_in_china = 18 <= lat <= 54
+                        is_lng_in_china = 73 <= lng <= 135
+                        is_lat_as_lng_in_china = 73 <= lat <= 135
+                        is_lng_as_lat_in_china = 18 <= lng <= 54
+
+                        if not is_lat_in_china and not is_lng_in_china:
+                            if is_lat_as_lng_in_china and is_lng_as_lat_in_china:
+                                needs_fix = True
+                                fix_reason = f"根据中国地理范围判断：lat({lat})更像经度，lng({lng})更像纬度"
                 
                 if needs_fix:
                     need_fix_count += 1
