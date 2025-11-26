@@ -10,6 +10,7 @@ import { useTimelineStore } from "../store/timeline";
 import { TimelineItem, TimelineType } from "../lib/types";
 import { createEntry, createKeydate, createPhoto, deleteEntry, deleteKeydate, deletePhoto, updateEntry, updateKeydate, updatePhoto } from "../lib/api";
 import { AMAP_WEB_KEY } from "../lib/config";
+import { emitAppEvent } from "../lib/eventBus";
 
 type ModalState =
   | { mode: "create"; type: TimelineType; item?: null }
@@ -201,6 +202,7 @@ const TimelinePage: React.FC = () => {
         }
       }
       await init(filters);
+      emitAppEvent({ type: "map:invalidate" });
       closeModal();
     } catch (err: any) {
       setError(err?.response?.data?.detail || err?.message || "保存失败，请稍后重试");
@@ -215,6 +217,7 @@ const TimelinePage: React.FC = () => {
     if (item.type === "keydate") await deleteKeydate(item.id);
     if (item.type === "photo") await deletePhoto(item.id);
     await init(filters);
+    emitAppEvent({ type: "map:invalidate" });
   };
 
   return (

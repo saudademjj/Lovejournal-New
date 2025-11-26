@@ -7,6 +7,7 @@ import { TimelineItem } from "../lib/types";
 import { getDaysDiff, cleanGeo } from "../lib/utils";
 import { Input } from "../components/ui/input";
 import { AMAP_WEB_KEY } from "../lib/config";
+import { emitAppEvent } from "../lib/eventBus";
 
 const nowInputValue = () => {
   const d = new Date();
@@ -70,6 +71,7 @@ const AnniversariesPage: React.FC = () => {
         location_coords: form.locationCoords || undefined,
       });
       await loadDates();
+      emitAppEvent({ type: "map:invalidate" });
       setModalOpen(false);
     } catch (err: any) {
       setError(err?.response?.data?.detail || err?.message || "保存失败，请稍后重试");

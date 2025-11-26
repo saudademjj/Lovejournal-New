@@ -127,8 +127,8 @@ export async function deletePhoto(id: number) {
   await api.delete(`/photos/${id}`);
 }
 
-export async function fetchMap() {
-  const res = await api.get<MapResponse>("/map");
+export async function fetchMap(params?: { q?: string; type?: string; tag?: string; limit?: number; since_version?: number }) {
+  const res = await api.get<MapResponse>("/map", { params });
   return res.data;
 }
 

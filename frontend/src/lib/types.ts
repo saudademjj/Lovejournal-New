@@ -38,4 +38,6 @@ export interface MapMarker {
 
 export interface MapResponse {
   markers: MapMarker[];
+   version: number;
+   unchanged?: boolean;
 }

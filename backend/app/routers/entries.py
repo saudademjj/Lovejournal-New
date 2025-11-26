@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..database import get_session
 from ..deps import get_current_user
+from ..map_version import bump_map_version
 from ..models import Entry, KeyDate, Photo, User
 from ..schemas import EntryCreate, EntryUpdate, KeyDateBase, KeyDateUpdate, TimelineEntry
 from ..utils import GeoHelper, extract_tags, parse_datetime
@@ -62,6 +63,7 @@ async def create_entry(
     session.add(entry)
     await session.commit()
     await session.refresh(entry)
+    await bump_map_version(session)
     return _timeline_entry_from_entry(entry)
 
 
@@ -91,6 +93,7 @@ async def update_entry(
     entry.tags = _format_tags(entry.content, updated_location)
     await session.commit()
     await session.refresh(entry)
+    await bump_map_version(session)
     return _timeline_entry_from_entry(entry)
 
 
@@ -105,6 +108,7 @@ async def delete_entry(
         raise HTTPException(status_code=404, detail="Entry not found")
     await session.delete(entry)
     await session.commit()
+    await bump_map_version(session)
     return {"ok": True}
 
 
@@ -122,6 +126,7 @@ async def create_keydate(
     session.add(kd)
     await session.commit()
     await session.refresh(kd)
+    await bump_map_version(session)
     return TimelineEntry(
         id=kd.id,
         type="keydate",
@@ -158,6 +163,7 @@ async def update_keydate(
     kd.tags = _format_tags(kd.title, updated_location)
     await session.commit()
     await session.refresh(kd)
+    await bump_map_version(session)
     return TimelineEntry(
         id=kd.id,
         type="keydate",
@@ -179,6 +185,7 @@ async def delete_keydate(
         raise HTTPException(status_code=404, detail="Key date not found")
     await session.delete(kd)
     await session.commit()
+    await bump_map_version(session)
     return {"ok": True}
 
 
@@ -216,6 +223,7 @@ async def create_photo(
     session.add(photo)
     await session.commit()
     await session.refresh(photo)
+    await bump_map_version(session)
     return TimelineEntry(
         id=photo.id,
         type="photo",
@@ -268,6 +276,7 @@ async def update_photo(
     photo.tags = _format_tags(photo.caption, photo.location)
     await session.commit()
     await session.refresh(photo)
+    await bump_map_version(session)
     return TimelineEntry(
         id=photo.id,
         type="photo",
@@ -297,4 +306,5 @@ async def delete_photo(
             pass
     await session.delete(photo)
     await session.commit()
+    await bump_map_version(session)
     return {"ok": True}
