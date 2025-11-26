@@ -59,38 +59,77 @@ const MapPage: React.FC = () => {
     (adcode: string, targetPolygons?: Map<string, any[]>) => {
       if (!window.AMap || !mapRef.current) return;
       const store = targetPolygons || provincePolygonsRef.current;
+
+      // 检查是否已有有效的多边形
       if (store.has(adcode)) {
         const existing = store.get(adcode);
-        if (existing && existing.length > 0 && existing[0].getMap()) return;
+        // 确保多边形仍然绑定在地图上
+        if (existing && existing.length > 0) {
+          const firstPoly = existing[0];
+          try {
+            // 检查多边形是否仍在地图上
+            if (firstPoly.getMap && firstPoly.getMap()) {
+              return; // 已存在且有效，无需重绘
+            }
+          } catch (e) {
+            // 多边形可能已被销毁，继续重绘
+            console.log("Polygon destroyed, redrawing:", adcode);
+          }
+        }
+        // 清理旧的无效多边形
+        const oldPolys = store.get(adcode);
+        if (oldPolys) {
+          oldPolys.forEach((p) => {
+            try {
+              p.setMap(null);
+            } catch (e) {
+              // 忽略已销毁的多边形
+            }
+          });
+        }
+        store.delete(adcode);
       }
+
       const feats = provinceFeaturesRef.current.get(adcode);
       if (!feats || !feats.length) {
         console.warn("No features for province:", adcode);
         return;
       }
+
       console.log("Drawing province:", adcode, "features:", feats.length);
       const polys: any[] = [];
+
       feats.forEach((f) => {
         f.polygons.forEach((poly) => {
-          const paths = poly.map((ring: any) => ring.map(([lng, lat]: [number, number]) => [lng, lat]));
-          if (paths.length) {
-            const p = new window.AMap.Polygon({
-              path: paths,
-              fillColor: "#ff003c",
-              fillOpacity: 0.25,
-              strokeColor: "#ff003c",
-              strokeOpacity: 0.6,
-              strokeWeight: 1,
-              zIndex: 5,
-              bubble: false,
-            });
-            p.setMap(mapRef.current);
-            polys.push(p);
+          // GeoJSON格式: [经度, 纬度]，高德Polygon需要 LngLat 对象或 [lng, lat] 数组
+          const paths = poly.map((ring: [number, number][]) =>
+            ring.map(([lng, lat]: [number, number]) => new window.AMap.LngLat(lng, lat))
+          );
+
+          if (paths.length && paths[0].length > 0) {
+            try {
+              const p = new window.AMap.Polygon({
+                path: paths,
+                fillColor: "#ff003c",
+                fillOpacity: 0.25,
+                strokeColor: "#ff003c",
+                strokeOpacity: 0.6,
+                strokeWeight: 1,
+                zIndex: 5,
+                bubble: true, // 允许事件穿透
+              });
+              p.setMap(mapRef.current);
+              polys.push(p);
+            } catch (e) {
+              console.error("Failed to create polygon for", adcode, e);
+            }
           }
         });
       });
+
       if (polys.length) {
         store.set(adcode, polys);
+        console.log("Province drawn successfully:", adcode, "polygons:", polys.length);
       }
     },
     []
@@ -193,6 +232,12 @@ const MapPage: React.FC = () => {
         const localVisited = new Set<string>();
         const localPolygons = new Map<string, any[]>();
 
+        /**
+         * 为重叠的标记添加抖动偏移
+         * @param lat 纬度 (范围 -90 到 90)
+         * @param lng 经度 (范围 -180 到 180)
+         * @returns 高德 LngLat 对象
+         */
         const jitter = (lat: number, lng: number) => {
           const key = `${Math.round(lat * 10)},${Math.round(lng * 10)}`;
           const count = (countCache[key] || 0) + 1;
@@ -202,8 +247,10 @@ const MapPage: React.FC = () => {
             const radius = 0.012 * Math.sqrt(count);
             const newLat = lat + radius * Math.cos(angle);
             const newLng = lng + radius * Math.sin(angle) * 1.3;
+            // 高德 LngLat 参数顺序: (经度, 纬度)
             return new window.AMap.LngLat(newLng, newLat);
           }
+          // 高德 LngLat 参数顺序: (经度, 纬度)
           return new window.AMap.LngLat(lng, lat);
         };
 
@@ -229,6 +276,13 @@ const MapPage: React.FC = () => {
             await pause();
           }
           const m = data[idx];
+
+          // 验证坐标范围
+          if (m.lat < -90 || m.lat > 90 || m.lng < -180 || m.lng > 180) {
+            console.warn("Invalid coordinates for marker:", m.id, "lat:", m.lat, "lng:", m.lng);
+            continue;
+          }
+
           const pos = jitter(m.lat, m.lng);
           let marker;
           if (m.kind === "keydate") {

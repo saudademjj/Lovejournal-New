@@ -26,10 +26,35 @@ const extractCoordsText = (value?: string | null) => {
   if (!value) return "";
   const nums = (value.replace("，", ",").match(/-?\d+(?:\.\d+)?/g) || []).map(parseFloat);
   if (nums.length < 2 || Number.isNaN(nums[0]) || Number.isNaN(nums[1])) return "";
-  let lat = nums[0];
-  let lng = nums[1];
-  if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) [lat, lng] = [lng, lat];
-  return `${lat},${lng}`;
+
+  const first = nums[0];
+  const second = nums[1];
+  let lat: number, lng: number;
+
+  // 智能判断坐标顺序
+  // 经度范围: -180 到 180
+  // 纬度范围: -90 到 90
+  if (Math.abs(first) > 90) {
+    // 第一个超过90，是经度（高德格式 lng,lat）
+    lng = first;
+    lat = second;
+  } else if (Math.abs(second) > 90) {
+    // 第二个超过90，是经度（lat,lng格式，需要转换）
+    lat = first;
+    lng = second;
+  } else {
+    // 都在±90内，从存储的location字段提取
+    // 由于后端存储格式是 "lat,lng location_text"
+    // 我们按照数据库存储格式来解析：第一个是纬度
+    lat = first;
+    lng = second;
+  }
+
+  // 验证范围
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return "";
+
+  // 返回高德格式：经度,纬度 (这是发送给后端的格式)
+  return `${lng},${lat}`;
 };
 
 const TimelinePage: React.FC = () => {
