@@ -63,7 +63,7 @@ export async function fetchTags() {
 
 export async function createEntry(payload: { content: string; created_at?: string; location?: string; location_coords?: string }) {
   const res = await api.post("/entries", payload);
-  invalidateMap();
+  setTimeout(() => invalidateMap(), 100);
   return res.data;
 }
 
@@ -72,18 +72,18 @@ export async function updateEntry(
   payload: { content?: string; created_at?: string; location?: string; location_coords?: string }
 ) {
   const res = await api.put(`/entries/${id}`, payload);
-  invalidateMap();
+  setTimeout(() => invalidateMap(), 100);
   return res.data;
 }
 
 export async function deleteEntry(id: number) {
   await api.delete(`/entries/${id}`);
-  invalidateMap();
+  setTimeout(() => invalidateMap(), 100);
 }
 
 export async function createKeydate(payload: { title: string; date?: string; location?: string; location_coords?: string }) {
   const res = await api.post("/keydates", payload);
-  invalidateMap();
+  setTimeout(() => invalidateMap(), 100);
   return res.data;
 }
 
@@ -92,13 +92,13 @@ export async function updateKeydate(
   payload: { title?: string; date?: string; location?: string; location_coords?: string }
 ) {
   const res = await api.put(`/keydates/${id}`, payload);
-  invalidateMap();
+  setTimeout(() => invalidateMap(), 100);
   return res.data;
 }
 
 export async function deleteKeydate(id: number) {
   await api.delete(`/keydates/${id}`);
-  invalidateMap();
+  setTimeout(() => invalidateMap(), 100);
 }
 
 export async function createPhoto(payload: {
@@ -115,7 +115,7 @@ export async function createPhoto(payload: {
   if (payload.location_coords) form.append("location_coords", payload.location_coords);
   form.append("file", payload.file);
   const res = await api.post("/photos", form);
-  invalidateMap();
+  setTimeout(() => invalidateMap(), 100);
   return res.data;
 }
 
@@ -130,13 +130,13 @@ export async function updatePhoto(
   if (payload.location_coords) form.append("location_coords", payload.location_coords);
   if (payload.file) form.append("file", payload.file);
   const res = await api.put(`/photos/${id}`, form);
-  invalidateMap();
+  setTimeout(() => invalidateMap(), 100);
   return res.data;
 }
 
 export async function deletePhoto(id: number) {
   await api.delete(`/photos/${id}`);
-  invalidateMap();
+  setTimeout(() => invalidateMap(), 100);
 }
 
 export async function fetchMap(params?: { q?: string; type?: string; tag?: string; limit?: number; since_version?: number }) {

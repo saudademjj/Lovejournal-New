@@ -122,7 +122,8 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
     set({ mapLoading: true, mapError: null, mapRequestKey: requestKey });
 
     try {
-      const res = await fetchMap({
+      const ensureCurrent = () => get().mapRequestKey === requestKey;
+      let res = await fetchMap({
         q: merged.q,
         type: merged.type,
         tag: merged.tag,
@@ -130,21 +131,44 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
         since_version: forceRefresh ? 0 : mapVersion || 0,
       });
 
-      if (get().mapRequestKey !== requestKey) {
+      if (!ensureCurrent()) {
         console.log("[refreshMap] Request outdated, ignoring results");
         return;
       }
 
-      const items = Array.isArray(res?.markers) ? res.markers : [];
-      console.log("[refreshMap] Successfully loaded", items.length, "map markers, version:", res?.version);
+      if (res?.unchanged && forceRefresh) {
+        console.warn("[refreshMap] Force refresh returned unchanged, retrying with version 0");
+        res = await fetchMap({
+          q: merged.q,
+          type: merged.type,
+          tag: merged.tag,
+          limit,
+          since_version: 0,
+        });
+      }
+
+      if (!ensureCurrent()) {
+        console.log("[refreshMap] Request outdated after retry, ignoring results");
+        return;
+      }
+
+      const items = res?.unchanged ? get().mapItems : Array.isArray(res?.markers) ? res.markers : [];
+      const nextVersion = res?.version ?? mapVersion ?? 1;
+      console.log(
+        "[refreshMap] Successfully loaded",
+        items.length,
+        "map markers, version:",
+        nextVersion,
+        res?.unchanged ? "(unchanged)" : ""
+      );
 
       set({
         mapItems: items,
         mapLoading: false,
         mapError: null,
         mapRequestKey: null,
-        mapDataKey: `${requestKey}|v${res?.version ?? mapVersion ?? "0"}`,
-        mapVersion: res?.version ?? mapVersion ?? 1,
+        mapDataKey: `${requestKey}|v${nextVersion}`,
+        mapVersion: nextVersion,
       });
     } catch (e) {
       if (get().mapRequestKey === requestKey) {

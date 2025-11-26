@@ -44,61 +44,25 @@ const MapPage: React.FC = () => {
   const markerInstancesRef = React.useRef<any[]>([]);
   const buildSeqRef = React.useRef(0);
   const infoWindowRef = React.useRef<any>(null);
+  const closeInfoWindowRef = React.useRef<() => void>(() => {});
   const provincePolygonsRef = React.useRef<Map<string, any[]>>(new Map());
   const visitedCodesRef = React.useRef<Set<string>>(new Set());
   const provinceFeaturesRef = React.useRef<Map<string, ProvinceFeature[]>>(new Map());
   const mapInitialized = React.useRef(false);
   const isInitialMount = React.useRef(true);
+  const markersRef = React.useRef<MapMarker[]>([]);
+  const refreshMapRef = React.useRef(refreshMap);
+  const latestFiltersRef = React.useRef({ q, type, tag });
   const geoReady = geoLoaded || !!geoError;
-
-  const loadGeoJSON = React.useCallback(async () => {
-    if (provinceFeaturesRef.current.size > 0) return;
-
-    const normalizePolygons = (geom: any): NormalizedPolygon[] => {
-      if (!geom) return [];
-      if (geom.type === "MultiPolygon") return geom.coordinates || [];
-      if (geom.type === "Polygon") return [geom.coordinates || []];
-      return [];
-    };
-
-    const sources = [
-      (import.meta as any).env?.VITE_GEOJSON_CDN as string,
-      "/geo/china-provinces.geojson",
-    ].filter(Boolean);
-
-    for (const src of sources) {
-      try {
-        const res = await fetch(src, { cache: "force-cache" });
-        if (!res.ok) continue;
-        const data = await res.json();
-        (data.features || []).forEach((f: any) => {
-          const props = f.properties || {};
-          const code = String(props.adcode || props.parent?.adcode || (props.acroutes || []).slice(-1)[0] || "");
-          const normalized = code.slice(0, 2).padEnd(6, "0");
-          const polygons = normalizePolygons(f.geometry);
-          if (!polygons.length) return;
-          const list = provinceFeaturesRef.current.get(normalized) || [];
-          list.push({ polygons });
-          provinceFeaturesRef.current.set(normalized, list);
-        });
-        if (provinceFeaturesRef.current.size > 0) {
-          console.log("GeoJSON loaded from", src, "provinces:", provinceFeaturesRef.current.size);
-          setGeoLoaded(true);
-          setGeoError(null);
-          return;
-        }
-      } catch (err) {
-        console.error("Failed to load geojson from", src, err);
-      }
-    }
-    setGeoError("省份边界加载失败，请刷新重试");
-  }, []);
 
   const drawProvince = React.useCallback(
     (adcode: string, targetPolygons?: Map<string, any[]>) => {
       if (!window.AMap || !mapRef.current) return;
       const store = targetPolygons || provincePolygonsRef.current;
-      if (store.has(adcode)) return;
+      if (store.has(adcode)) {
+        const existing = store.get(adcode);
+        if (existing && existing.length > 0 && existing[0].getMap()) return;
+      }
       const feats = provinceFeaturesRef.current.get(adcode);
       if (!feats || !feats.length) {
         console.warn("No features for province:", adcode);
@@ -140,9 +104,70 @@ const MapPage: React.FC = () => {
     [drawProvince]
   );
 
+  const loadGeoJSON = React.useCallback(async () => {
+    if (provinceFeaturesRef.current.size > 0) return;
+
+    const normalizePolygons = (geom: any): NormalizedPolygon[] => {
+      if (!geom) return [];
+      if (geom.type === "MultiPolygon") return geom.coordinates || [];
+      if (geom.type === "Polygon") return [geom.coordinates || []];
+      return [];
+    };
+
+    const sources = [
+      (import.meta as any).env?.VITE_GEOJSON_CDN as string,
+      "/geo/china-provinces.geojson",
+    ].filter(Boolean);
+
+    try {
+      for (const src of sources) {
+        try {
+          const res = await fetch(src, { cache: "force-cache" });
+          if (!res.ok) continue;
+          const data = await res.json();
+          (data.features || []).forEach((f: any) => {
+            const props = f.properties || {};
+            const code = String(props.adcode || props.parent?.adcode || (props.acroutes || []).slice(-1)[0] || "");
+            const normalized = code.slice(0, 2).padEnd(6, "0");
+            const polygons = normalizePolygons(f.geometry);
+            if (!polygons.length) return;
+            const list = provinceFeaturesRef.current.get(normalized) || [];
+            list.push({ polygons });
+            provinceFeaturesRef.current.set(normalized, list);
+          });
+          if (provinceFeaturesRef.current.size > 0) {
+            console.log("GeoJSON loaded from", src, "provinces:", provinceFeaturesRef.current.size);
+            setGeoLoaded(true);
+            setGeoError(null);
+            return;
+          }
+        } catch (err) {
+          console.error("Failed to load geojson from", src, err);
+        }
+      }
+      setGeoError("省份边界加载失败，请刷新重试");
+    } finally {
+      if (mapInitialized.current && markersRef.current.length > 0) {
+        refreshProvinces();
+      }
+    }
+  }, [refreshProvinces]);
+
   const markers = React.useMemo<MapMarker[]>(() => {
     return (mapItems || []).filter((m) => Number.isFinite(m.lat) && Number.isFinite(m.lng));
   }, [mapItems]);
+
+  React.useEffect(() => {
+    markersRef.current = markers;
+  }, [markers]);
+
+  React.useEffect(() => {
+    refreshMapRef.current = refreshMap;
+  }, [refreshMap]);
+
+  React.useEffect(() => {
+    latestFiltersRef.current = { q, type, tag };
+  }, [q, type, tag]);
 
   const buildMarkers = React.useCallback(
     async (data: MapMarker[]) => {
@@ -188,13 +213,13 @@ const MapPage: React.FC = () => {
           return "rgba(255,255,255,0.9)";
         };
 
-        const closeInfo = () => {
+        closeInfoWindowRef.current = () => {
           if (infoWindowRef.current) {
             infoWindowRef.current.close();
             infoWindowRef.current = null;
           }
         };
-        (window as any).closeInfoWindow = closeInfo;
+        (window as any).closeInfoWindow = () => closeInfoWindowRef.current();
 
         const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -241,7 +266,7 @@ const MapPage: React.FC = () => {
         `;
 
           marker.on("click", () => {
-            closeInfo();
+            closeInfoWindowRef.current();
             const info = new window.AMap.InfoWindow({
               isCustom: true,
               content: contentHtml,
@@ -253,9 +278,6 @@ const MapPage: React.FC = () => {
           });
 
           marker.setMap(map);
-          if (!markerFilters[m.kind as keyof MarkerFilters]) {
-            marker.hide();
-          }
           markerInstances.push(marker);
 
           const adcode = m.adcode ? String(m.adcode) : "";
@@ -281,7 +303,7 @@ const MapPage: React.FC = () => {
         }
       }
     },
-    [refreshProvinces, markerFilters]
+    [refreshProvinces]
   );
 
   const initMap = React.useCallback(() => {
@@ -373,10 +395,11 @@ const MapPage: React.FC = () => {
   // 5. 事件总线驱动的实时同步
   React.useEffect(() => {
     const off = onAppEvent("map:invalidate", () => {
-      refreshMap({ q, type, tag, limit: 800, force: true });
+      const { q: fq, type: ftype, tag: ftag } = latestFiltersRef.current;
+      refreshMapRef.current({ q: fq, type: ftype, tag: ftag, limit: 800, force: true });
     });
     return off;
-  }, [refreshMap, q, type, tag]);
+  }, []);
 
   // 6. 初始化地图（当 AMap 与 GeoJSON 准备好时）
   React.useEffect(() => {
@@ -402,7 +425,7 @@ const MapPage: React.FC = () => {
         m.hide();
       }
     });
-  }, [markerFilters]);
+  }, [markerFilters, markers]);
 
   const statusStyle: React.CSSProperties = {
     position: "fixed",
