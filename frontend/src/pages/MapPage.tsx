@@ -158,22 +158,48 @@ const MapPage: React.FC = () => {
       "/geo/china-provinces.geojson",
     ].filter(Boolean);
 
-    try {
+    try{
+      console.log("GeoJSON sources to try:", sources);
       for (const src of sources) {
+          console.log("Trying to load GeoJSON from:", src);
         try {
           const res = await fetch(src, { cache: "force-cache" });
           if (!res.ok) continue;
           const data = await res.json();
           (data.features || []).forEach((f: any) => {
             const props = f.properties || {};
-            const code = String(props.adcode || props.parent?.adcode || (props.acroutes || []).slice(-1)[0] || "");
+            let code = String(
+                props.adcode ||
+                props.ADCODE ||
+                props.code ||
+                props.CODE ||
+                props.parent?.adcode ||
+                props.parent?.ADCODE ||
+                (props.acroutes || []).slice(-1)[0] ||
+                ""
+            );
+
+            if (!code && props.name) {
+                console.warn("GeoJSON feature missing adcode, name:", props.name);
+            }
+            if (!code) return;
+
             const normalized = code.slice(0, 2).padEnd(6, "0");
             const polygons = normalizePolygons(f.geometry);
-            if (!polygons.length) return;
+
+            if (!polygons.length){
+                console.warn("No polygons for province:", normalized);
+                return;
+            }
+
             const list = provinceFeaturesRef.current.get(normalized) || [];
             list.push({ polygons });
             provinceFeaturesRef.current.set(normalized, list);
+
+            console.log("Loaded province:", normalized, "polygons:", polygons.length);
           });
+
+          console.log("Total provinces loaded:", provinceFeaturesRef.current.size);
           if (provinceFeaturesRef.current.size > 0) {
             console.log("GeoJSON loaded from", src, "provinces:", provinceFeaturesRef.current.size);
             setGeoLoaded(true);
@@ -338,6 +364,7 @@ const MapPage: React.FC = () => {
           if (adcode) {
             const provinceCode = adcode.slice(0, 2).padEnd(6, "0");
             localVisited.add(provinceCode);
+            console.log("Marker adcode:", adcode, "-> province:", provinceCode);
           }
         }
         if (buildSeqRef.current !== buildId) {

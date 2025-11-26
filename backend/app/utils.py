@@ -73,7 +73,7 @@ class GeoHelper:
             else:
                 # 两个都在 -90 到 90 之间，默认按高德格式处理 (lng,lat)
                 # 因为我们主要使用高德API
-                lng, lat = first, second
+                lat, lng = first, second
 
             # 最终验证
             if not (-90 <= lat <= 90 and -180 <= lng <= 180):
@@ -198,7 +198,6 @@ class GeoHelper:
 
         if coords_pair:
             lat, lng = coords_pair[0], coords_pair[1]
-            # 存储格式：使用纬度,经度的格式（与数据库字段一致）
             coords_str = f"{lat:.6f},{lng:.6f}"
             if location_text:
                 return f"{coords_str} {location_text}"
