@@ -360,7 +360,9 @@ const TimelinePage: React.FC = () => {
                       AUTO
                     </button>
                   </div>
-                  <div className="geo-status">{form.locationCoords ? "已匹配" : ""}</div>
+                  <div className="geo-status">
+                    {form.locationCoords ? `坐标: ${form.locationCoords}` : "未匹配坐标"}
+                  </div>
                   <input type="hidden" name="location_coords" value={form.locationCoords} />
                 </>
               )}
@@ -387,7 +389,9 @@ const TimelinePage: React.FC = () => {
                       AUTO
                     </button>
                   </div>
-                  <div className="geo-status">{form.locationCoords ? "已匹配" : ""}</div>
+                  <div className="geo-status">
+                    {form.locationCoords ? `坐标: ${form.locationCoords}` : "未匹配坐标"}
+                  </div>
                   <input type="hidden" name="location_coords" value={form.locationCoords} />
                 </>
               )}
@@ -422,7 +426,9 @@ const TimelinePage: React.FC = () => {
                       AUTO
                     </button>
                   </div>
-                  <div className="geo-status">{form.locationCoords ? "已匹配" : ""}</div>
+                  <div className="geo-status">
+                    {form.locationCoords ? `坐标: ${form.locationCoords}` : "未匹配坐标"}
+                  </div>
                   <input type="hidden" name="location_coords" value={form.locationCoords} />
                 </>
               )}

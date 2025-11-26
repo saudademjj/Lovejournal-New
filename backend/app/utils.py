@@ -34,6 +34,7 @@ class GeoHelper:
         self.amap_key = amap_key
         self.coord_number_re = re.compile(r"(-?\\d+(?:\\.\\d+)?)")
         self.geocode_cache: dict[str, GeoResult | None] = {}
+        self.reverse_cache: dict[str, str | None] = {}
 
     def parse_coords_from_location(self, location_text: str | None) -> GeoResult | None:
         if not location_text:
@@ -91,10 +92,37 @@ class GeoHelper:
         self.geocode_cache[location_text] = result
         return result
 
+    async def reverse_geocode(self, lat: float, lng: float) -> str | None:
+        key = f"{lat:.6f},{lng:.6f}"
+        if key in self.reverse_cache:
+            return self.reverse_cache[key]
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(
+                    "https://restapi.amap.com/v3/geocode/regeo",
+                    params={"key": self.amap_key, "location": f"{lng},{lat}"},
+                )
+                data = resp.json()
+                adcode = (
+                    data.get("regeocode", {})
+                    .get("addressComponent", {})
+                    .get("adcode")
+                )
+        except Exception:
+            adcode = None
+        if adcode:
+            adcode = str(adcode).strip() or None
+        else:
+            adcode = None
+        self.reverse_cache[key] = adcode
+        return adcode
+
     async def resolve_location(self, location_text: str | None) -> GeoResult | None:
         coords = self.parse_coords_from_location(location_text)
         if coords:
-            return coords
+            lat, lng, _ = coords
+            adcode = await self.reverse_geocode(lat, lng)
+            return lat, lng, adcode
         return await self.geocode_location(location_text or "")
 
     async def merge_location_and_coords(self, location_text: str | None, coords_text: str | None):
