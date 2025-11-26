@@ -29,8 +29,9 @@
    npm run dev  # 默认 http://localhost:5173
    ```
 2. 若后端地址非默认，设置 `VITE_API_BASE_URL`、`VITE_AMAP_JS_KEY`、`VITE_AMAP_JS_CODE`。
+3. 可选：设置 `VITE_GEOJSON_CDN` 指向 GeoJSON CDN（如 OSS/S3），前端会优先强缓存加载省份边界。
 
 ## 运行
 
 - 登录后可进行日记/照片/纪念日的新增、编辑、删除，时间轴无限滚动、年份跳转、HUD 时钟、心形动效、地图定位等保持原有视觉与交互。
-- 地图数据和图片来自后端 `/api/map` 与 `/uploads/*`。
+- 地图数据和图片来自后端 `/api/map` 与 `/uploads/*`，地图接口携带版本号可用于前端缓存/同步。

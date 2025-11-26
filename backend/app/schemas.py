@@ -96,3 +96,5 @@ class MapMarker(BaseModel):
 
 class MapResponse(BaseModel):
     markers: list[MapMarker]
+    version: int = 1
+    unchanged: bool = False

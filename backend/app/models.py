@@ -26,7 +26,7 @@ class Entry(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     tags: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
@@ -36,7 +36,7 @@ class KeyDate(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     date: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, index=True)
-    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     tags: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), server_default=func.now(), nullable=False, index=True
@@ -49,5 +49,15 @@ class Photo(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     caption: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     tags: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class MetaKV(Base):
+    __tablename__ = "meta_kv"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(255), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), server_default=func.now(), onupdate=func.now(), nullable=False, index=True
+    )

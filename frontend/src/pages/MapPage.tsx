@@ -4,6 +4,7 @@ import { MapMarker } from "../lib/types";
 import { AMAP_JS_CODE, AMAP_JS_KEY } from "../lib/config";
 import { useTimelineStore } from "../store/timeline";
 import { shallow } from "zustand/shallow";
+import { onAppEvent } from "../lib/eventBus";
 
 declare global {
   interface Window {
@@ -17,6 +18,9 @@ type MarkerFilters = {
   photo: boolean;
   keydate: boolean;
 };
+
+type NormalizedPolygon = [number, number][][];
+type ProvinceFeature = { polygons: NormalizedPolygon[]; bbox: [number, number, number, number] };
 
 const MapPage: React.FC = () => {
   const { mapItems, mapLoading, mapError, refreshMap, filters: timelineFilters } = useTimelineStore(
@@ -42,31 +46,118 @@ const MapPage: React.FC = () => {
   const infoWindowRef = React.useRef<any>(null);
   const provincePolygonsRef = React.useRef<Map<string, any[]>>(new Map());
   const visitedCodesRef = React.useRef<Set<string>>(new Set());
-  const provinceFeaturesRef = React.useRef<Map<string, any[]>>(new Map());
+  const provinceFeaturesRef = React.useRef<Map<string, ProvinceFeature[]>>(new Map());
   const mapInitialized = React.useRef(false);
+  const isInitialMount = React.useRef(true);
 
   const loadGeoJSON = React.useCallback(async () => {
     if (provinceFeaturesRef.current.size > 0) return;
-    try {
-      const res = await fetch("/geo/china-provinces.geojson");
-      const data = await res.json();
-      (data.features || []).forEach((f: any) => {
-        const props = f.properties || {};
-        const code = String(props.adcode || props.parent?.adcode || (props.acroutes || []).slice(-1)[0] || "");
-        const normalized = code.slice(0, 2).padEnd(6, "0");
-        if (!provinceFeaturesRef.current.has(normalized)) {
-          provinceFeaturesRef.current.set(normalized, []);
+
+    const normalizePolygons = (geom: any): NormalizedPolygon[] => {
+      if (!geom) return [];
+      if (geom.type === "MultiPolygon") return geom.coordinates || [];
+      if (geom.type === "Polygon") return [geom.coordinates || []];
+      return [];
+    };
+
+    const calcBbox = (polys: NormalizedPolygon[]) => {
+      let minLng = Number.POSITIVE_INFINITY;
+      let minLat = Number.POSITIVE_INFINITY;
+      let maxLng = Number.NEGATIVE_INFINITY;
+      let maxLat = Number.NEGATIVE_INFINITY;
+      polys.forEach((poly) =>
+        poly.forEach((ring) =>
+          ring.forEach(([lng, lat]) => {
+            minLng = Math.min(minLng, lng);
+            minLat = Math.min(minLat, lat);
+            maxLng = Math.max(maxLng, lng);
+            maxLat = Math.max(maxLat, lat);
+          })
+        )
+      );
+      if (!Number.isFinite(minLng) || !Number.isFinite(minLat) || !Number.isFinite(maxLng) || !Number.isFinite(maxLat)) {
+        return [-180, -90, 180, 90] as [number, number, number, number];
+      }
+      return [minLng, minLat, maxLng, maxLat] as [number, number, number, number];
+    };
+
+    const sources = [
+      (import.meta as any).env?.VITE_GEOJSON_CDN as string,
+      "/geo/china-provinces.geojson",
+    ].filter(Boolean);
+
+    for (const src of sources) {
+      try {
+        const res = await fetch(src, { cache: "force-cache" });
+        if (!res.ok) continue;
+        const data = await res.json();
+        (data.features || []).forEach((f: any) => {
+          const props = f.properties || {};
+          const code = String(props.adcode || props.parent?.adcode || (props.acroutes || []).slice(-1)[0] || "");
+          const normalized = code.slice(0, 2).padEnd(6, "0");
+          const polygons = normalizePolygons(f.geometry);
+          if (!polygons.length) return;
+          const bbox = calcBbox(polygons);
+          const list = provinceFeaturesRef.current.get(normalized) || [];
+          list.push({ polygons, bbox });
+          provinceFeaturesRef.current.set(normalized, list);
+        });
+        if (provinceFeaturesRef.current.size > 0) {
+          console.log("GeoJSON loaded from", src, "provinces:", provinceFeaturesRef.current.size);
+          setGeoLoaded(true);
+          setGeoError(null);
+          return;
         }
-        provinceFeaturesRef.current.get(normalized)!.push(f);
-      });
-      console.log("GeoJSON loaded, provinces:", provinceFeaturesRef.current.size);
-      setGeoLoaded(true);
-      setGeoError(null);
-    } catch (err) {
-      console.error("Failed to load geojson", err);
-      setGeoError("省份边界加载失败，请刷新重试");
+      } catch (err) {
+        console.error("Failed to load geojson from", src, err);
+      }
     }
+    setGeoError("省份边界加载失败，请刷新重试");
   }, []);
+
+  const pointInRing = React.useCallback((point: [number, number], ring: [number, number][]) => {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0];
+      const yi = ring[i][1];
+      const xj = ring[j][0];
+      const yj = ring[j][1];
+      const intersect = yi > point[1] !== yj > point[1] && point[0] < ((xj - xi) * (point[1] - yi)) / ((yj - yi) || 1e-9) + xi;
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }, []);
+
+  const pointInPolygon = React.useCallback(
+    (point: [number, number], polygon: NormalizedPolygon) => {
+      if (!polygon || polygon.length === 0) return false;
+      let inside = false;
+      polygon.forEach((ring, idx) => {
+        if (ring.length < 3) return;
+        if (pointInRing(point, ring)) {
+          inside = idx === 0 ? true : !inside;
+        }
+      });
+      return inside;
+    },
+    [pointInRing]
+  );
+
+  const findProvinceByPoint = React.useCallback(
+    (lng: number, lat: number) => {
+      for (const [code, feats] of provinceFeaturesRef.current.entries()) {
+        for (const feat of feats) {
+          const [minLng, minLat, maxLng, maxLat] = feat.bbox;
+          if (lng < minLng || lng > maxLng || lat < minLat || lat > maxLat) continue;
+          for (const poly of feat.polygons) {
+            if (pointInPolygon([lng, lat], poly)) return code;
+          }
+        }
+      }
+      return null;
+    },
+    [pointInPolygon]
+  );
 
   const drawProvince = React.useCallback(
     (adcode: string, targetPolygons?: Map<string, any[]>) => {
@@ -81,29 +172,8 @@ const MapPage: React.FC = () => {
       console.log("Drawing province:", adcode, "features:", feats.length);
       const polys: any[] = [];
       feats.forEach((f) => {
-        const geom = f.geometry || {};
-        const type = geom.type;
-        const coords = geom.coordinates || [];
-        if (type === "MultiPolygon") {
-          coords.forEach((poly: any) => {
-            const paths = poly.map((ring: any) => ring.map(([lng, lat]: [number, number]) => [lng, lat]));
-            if (paths.length) {
-              const p = new window.AMap.Polygon({
-                path: paths,
-                fillColor: "#ff003c",
-                fillOpacity: 0.25,
-                strokeColor: "#ff003c",
-                strokeOpacity: 0.6,
-                strokeWeight: 1,
-                zIndex: 5,
-                bubble: false,
-              });
-              p.setMap(mapRef.current);
-              polys.push(p);
-            }
-          });
-        } else if (type === "Polygon") {
-          const paths = coords.map((ring: any) => ring.map(([lng, lat]: [number, number]) => [lng, lat]));
+        f.polygons.forEach((poly) => {
+          const paths = poly.map((ring: any) => ring.map(([lng, lat]: [number, number]) => [lng, lat]));
           if (paths.length) {
             const p = new window.AMap.Polygon({
               path: paths,
@@ -118,7 +188,7 @@ const MapPage: React.FC = () => {
             p.setMap(mapRef.current);
             polys.push(p);
           }
-        }
+        });
       });
       if (polys.length) {
         store.set(adcode, polys);
@@ -136,32 +206,7 @@ const MapPage: React.FC = () => {
   );
 
   const markers = React.useMemo<MapMarker[]>(() => {
-    const parseCoords = (location?: string | null) => {
-      if (!location) return null;
-      const nums = (location.replace("，", ",").match(/-?\d+(?:\.\d+)?/g) || []).map(parseFloat);
-      if (nums.length < 2 || Number.isNaN(nums[0]) || Number.isNaN(nums[1])) return null;
-      let lat = nums[0];
-      let lng = nums[1];
-      if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) [lat, lng] = [lng, lat];
-      return { lat, lng };
-    };
-
-    const ms: MapMarker[] = [];
-    (mapItems || []).forEach((it) => {
-      const coords = parseCoords(it.location);
-      if (!coords) return;
-      ms.push({
-        id: it.id,
-        kind: it.type,
-        lat: coords.lat,
-        lng: coords.lng,
-        label: it.location || "",
-        timestamp: new Date(it.timestamp).toLocaleString(),
-        snippet: (it.content || it.caption || it.title || "").slice(0, 120),
-        image: it.image,
-      });
-    });
-    return ms;
+    return (mapItems || []).filter((m) => Number.isFinite(m.lat) && Number.isFinite(m.lng));
   }, [mapItems]);
 
   const buildMarkers = React.useCallback(
@@ -184,9 +229,7 @@ const MapPage: React.FC = () => {
         visitedCodesRef.current = new Set();
 
         const markerInstances: any[] = [];
-        const geocoder = new window.AMap.Geocoder({ extensions: "all" });
         const countCache: Record<string, number> = {};
-        const geocodeTasks: Promise<void>[] = [];
         const localVisited = new Set<string>();
         const localPolygons = new Map<string, any[]>();
 
@@ -249,7 +292,7 @@ const MapPage: React.FC = () => {
           const contentHtml = `
           <div class="amap-info-window-custom">
             <span class="info-close" onclick="closeInfoWindow()">×</span>
-            <div class="info-time">${m.timestamp}</div>
+            <div class="info-time">${new Date(m.timestamp).toLocaleString()}</div>
             ${m.image ? `<img src="${m.image}" class="info-img" loading="lazy">` : ""}
             <div class="info-content">${(m.snippet || "").slice(0, 120)}</div>
             <div class="info-geo">${m.label}</div>
@@ -274,31 +317,10 @@ const MapPage: React.FC = () => {
           }
           markerInstances.push(marker);
 
-          geocodeTasks.push(
-            new Promise<void>((resolve) => {
-              geocoder.getAddress([m.lng, m.lat], (_status: any, result: any) => {
-                if (buildSeqRef.current !== buildId) {
-                  resolve();
-                  return;
-                }
-                const raw = result?.regeocode?.addressComponent?.adcode;
-                if (raw) {
-                  const code = String(raw).slice(0, 2).padEnd(6, "0");
-                  console.log("Geocoded:", m.label, "adcode:", raw, "province:", code);
-                  const prevSize = localVisited.size;
-                  localVisited.add(code);
-                  if (localVisited.size > prevSize) {
-                    console.log("New province added:", code, "Total provinces:", localVisited.size);
-                    refreshProvinces(localVisited, localPolygons);
-                  }
-                }
-                resolve();
-              });
-            })
-          );
-        }
-        if (geocodeTasks.length) {
-          await Promise.allSettled(geocodeTasks);
+          const provinceCode = findProvinceByPoint(m.lng, m.lat);
+          if (provinceCode) {
+            localVisited.add(provinceCode);
+          }
         }
         if (buildSeqRef.current !== buildId) {
           cleanupTemp(markerInstances, localPolygons);
@@ -317,7 +339,7 @@ const MapPage: React.FC = () => {
         }
       }
     },
-    [refreshProvinces, markerFilters]
+    [refreshProvinces, markerFilters, findProvinceByPoint]
   );
 
   const initMap = React.useCallback(() => {
@@ -357,7 +379,7 @@ const MapPage: React.FC = () => {
       // 安全码配置
       (window as any)._AMapSecurityConfig = { securityJsCode: AMAP_JS_CODE };
       const script = document.createElement("script");
-      script.src = `https://webapi.amap.com/maps?v=2.0&key=${AMAP_JS_KEY}&plugin=AMap.Geocoder`;
+      script.src = `https://webapi.amap.com/maps?v=2.0&key=${AMAP_JS_KEY}`;
       script.async = true;
       script.onload = () => {
         setMapReady(true);
@@ -386,33 +408,61 @@ const MapPage: React.FC = () => {
 
   // 3. 同步时间轴数据到地图（依赖全局筛选）
   React.useEffect(() => {
-    refreshMap({ q, type, tag, per_page: 500 });
+    // 首次挂载时强制刷新，确保获取最新数据
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      refreshMap({ q, type, tag, limit: 800, force: true });
+    } else {
+      refreshMap({ q, type, tag, limit: 800 });
+    }
   }, [refreshMap, q, type, tag]);
 
   // 4. 页面可见时尝试刷新
   React.useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        refreshMap({ q, type, tag, per_page: 500, force: true });
+        refreshMap({ q, type, tag, limit: 800, force: true });
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [refreshMap, q, type, tag]);
 
-  // 5. 初始化地图（当 AMap 与 GeoJSON 准备好时）
+  // 5. 事件总线驱动的实时同步
+  React.useEffect(() => {
+    const off = onAppEvent("map:invalidate", () => {
+      refreshMap({ q, type, tag, limit: 800, force: true });
+    });
+    return off;
+  }, [refreshMap, q, type, tag]);
+
+  // 6. 初始化地图（当 AMap 与 GeoJSON 准备好时）
   React.useEffect(() => {
     if (mapReady && window.AMap && geoLoaded && !mapInitialized.current) {
       initMap();
     }
   }, [mapReady, geoLoaded, initMap]);
 
-  // 6. markers 更新时刷新地图标记
+  // 7. mapItems 更新时强制刷新地图标记（确保新数据同步）
   React.useEffect(() => {
     if (mapInitialized.current && window.AMap) {
+      console.log("mapItems changed, rebuilding markers. Count:", markers.length);
       buildMarkers(markers);
     }
-  }, [markers, buildMarkers]);
+  }, [mapItems, buildMarkers]);
+
+  // 8. markers 筛选器变化时更新标记可见性
+  React.useEffect(() => {
+    if (markerInstancesRef.current.length === 0) return;
+    markerInstancesRef.current.forEach((m) => {
+      const kind = m.getExtData()?.kind;
+      if (kind && markerFilters[kind as keyof MarkerFilters]) {
+        m.show();
+      } else {
+        m.hide();
+      }
+    });
+  }, [markerFilters]);
 
   const statusStyle: React.CSSProperties = {
     position: "fixed",
