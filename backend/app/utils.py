@@ -4,7 +4,7 @@ from typing import Optional
 
 import httpx
 
-tag_pattern = re.compile(r"#([\\w\\u4e00-\\u9fa5]+)")
+tag_pattern = re.compile(r"#([\w\u4e00-\u9fa5]+)")
 GeoResult = tuple[float, float, str | None]
 
 
@@ -32,7 +32,7 @@ def parse_datetime(value: Optional[str]) -> datetime:
 class GeoHelper:
     def __init__(self, amap_key: str):
         self.amap_key = amap_key
-        self.coord_number_re = re.compile(r"(-?\\d+(?:\\.\\d+)?)")
+        self.coord_number_re = re.compile(r"(-?\d+(?:\.\d+)?)")
         self.geocode_cache: dict[str, GeoResult | None] = {}
         self.reverse_cache: dict[str, str | None] = {}
 
