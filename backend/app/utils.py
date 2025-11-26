@@ -37,6 +37,16 @@ class GeoHelper:
         self.reverse_cache: dict[str, str | None] = {}
 
     def parse_coords_from_location(self, location_text: str | None) -> GeoResult | None:
+        """
+        解析位置文本中的坐标。
+
+        支持的格式：
+        - "经度,纬度" (高德格式，如 "87.617733,43.792818")
+        - "纬度,经度" (通用格式，会自动检测并交换)
+        - 混合文本如 "87.617733,43.792818 乌鲁木齐"
+
+        返回: (lat, lng, adcode) 或 None
+        """
         if not location_text:
             return None
         text = str(location_text).replace("，", ",")
@@ -44,11 +54,31 @@ class GeoHelper:
         if len(nums) < 2:
             return None
         try:
-            lat = float(nums[0])
-            lng = float(nums[1])
-            if abs(lat) > 90 and abs(lng) <= 90:
-                # swap if reversed
-                lat, lng = lng, lat
+            # 默认假设输入是高德格式：经度,纬度 (lng,lat)
+            first = float(nums[0])
+            second = float(nums[1])
+
+            # 判断坐标顺序：
+            # 经度范围: -180 到 180
+            # 纬度范围: -90 到 90
+            # 如果第一个数的绝对值 > 90，则它是经度（高德格式）
+            # 如果第一个数的绝对值 <= 90 且第二个数的绝对值 > 90，则是纬度在前
+
+            if abs(first) > 90:
+                # 第一个是经度，第二个是纬度 (高德格式 lng,lat)
+                lng, lat = first, second
+            elif abs(second) > 90:
+                # 第一个是纬度，第二个是经度 (lat,lng)
+                lat, lng = first, second
+            else:
+                # 两个都在 -90 到 90 之间，默认按高德格式处理 (lng,lat)
+                # 因为我们主要使用高德API
+                lng, lat = first, second
+
+            # 最终验证
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                return None
+
             return lat, lng, None
         except ValueError:
             return None
@@ -74,16 +104,17 @@ class GeoHelper:
         if data.get("status") == "1" and geocodes:
             loc = geocodes[0].get("location", "")
             adcode = (
-                str(
-                    geocodes[0].get("addressComponent", {}).get("adcode")
-                    or geocodes[0].get("adcode")
-                    or ""
-                ).strip()
-                or None
+                    str(
+                        geocodes[0].get("addressComponent", {}).get("adcode")
+                        or geocodes[0].get("adcode")
+                        or ""
+                    ).strip()
+                    or None
             )
             nums = self.coord_number_re.findall(loc)
             if len(nums) >= 2:
                 try:
+                    # 高德API返回格式: "经度,纬度"
                     lng, lat = float(nums[0]), float(nums[1])
                     result = (lat, lng, adcode)
                 except ValueError:
@@ -98,6 +129,7 @@ class GeoHelper:
             return self.reverse_cache[key]
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
+                # 高德逆地理编码API参数格式: location=经度,纬度
                 resp = await client.get(
                     "https://restapi.amap.com/v3/geocode/regeo",
                     params={"key": self.amap_key, "location": f"{lng},{lat}"},
@@ -130,14 +162,32 @@ class GeoHelper:
         coords_text = (coords_text or "").strip()
 
         def parse_coords_text(text: str) -> GeoResult | None:
+            """
+            解析坐标文本，支持多种格式。
+            高德API返回格式为 "经度,纬度"，前端AUTO按钮也使用此格式。
+            """
             nums = self.coord_number_re.findall(text.replace("，", ","))
             if len(nums) < 2:
                 return None
             try:
-                lat = float(nums[0])
-                lng = float(nums[1])
-                if abs(lat) > 90 and abs(lng) <= 90:
-                    lat, lng = lng, lat
+                first = float(nums[0])
+                second = float(nums[1])
+
+                # 智能判断坐标顺序
+                if abs(first) > 90:
+                    # 第一个超过90，必定是经度 (高德格式)
+                    lng, lat = first, second
+                elif abs(second) > 90:
+                    # 第二个超过90，是经度在后 (lat,lng格式)
+                    lat, lng = first, second
+                else:
+                    # 都在±90内，默认高德格式 (lng,lat)
+                    lng, lat = first, second
+
+                # 验证范围
+                if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                    return None
+
                 return lat, lng, None
             except ValueError:
                 return None
@@ -148,6 +198,7 @@ class GeoHelper:
 
         if coords_pair:
             lat, lng = coords_pair[0], coords_pair[1]
+            # 存储格式：使用纬度,经度的格式（与数据库字段一致）
             coords_str = f"{lat:.6f},{lng:.6f}"
             if location_text:
                 return f"{coords_str} {location_text}"
