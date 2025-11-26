@@ -20,7 +20,7 @@ type MarkerFilters = {
 };
 
 type NormalizedPolygon = [number, number][][];
-type ProvinceFeature = { polygons: NormalizedPolygon[]; bbox: [number, number, number, number] };
+type ProvinceFeature = { polygons: NormalizedPolygon[] };
 
 const MapPage: React.FC = () => {
   const { mapItems, mapLoading, mapError, refreshMap, filters: timelineFilters } = useTimelineStore(
@@ -46,10 +46,10 @@ const MapPage: React.FC = () => {
   const infoWindowRef = React.useRef<any>(null);
   const provincePolygonsRef = React.useRef<Map<string, any[]>>(new Map());
   const visitedCodesRef = React.useRef<Set<string>>(new Set());
-  const provinceCacheRef = React.useRef<Map<string, string | null>>(new Map());
   const provinceFeaturesRef = React.useRef<Map<string, ProvinceFeature[]>>(new Map());
   const mapInitialized = React.useRef(false);
   const isInitialMount = React.useRef(true);
+  const geoReady = geoLoaded || !!geoError;
 
   const loadGeoJSON = React.useCallback(async () => {
     if (provinceFeaturesRef.current.size > 0) return;
@@ -59,45 +59,6 @@ const MapPage: React.FC = () => {
       if (geom.type === "MultiPolygon") return geom.coordinates || [];
       if (geom.type === "Polygon") return [geom.coordinates || []];
       return [];
-    };
-
-    const simplifyRing = (ring: [number, number][], maxPoints = 140) => {
-      if (!ring || ring.length <= maxPoints) return ring;
-      const step = Math.ceil(ring.length / maxPoints);
-      const simplified: [number, number][] = [];
-      for (let i = 0; i < ring.length; i += step) {
-        simplified.push(ring[i]);
-      }
-      if (ring.length > 0 && simplified[simplified.length - 1] !== ring[ring.length - 1]) {
-        simplified.push(ring[ring.length - 1]);
-      }
-      return simplified;
-    };
-
-    const simplifyPolygons = (polys: NormalizedPolygon[]) =>
-      polys
-        .map((poly) => poly.map((ring) => simplifyRing(ring)))
-        .filter((poly) => poly.some((ring) => ring && ring.length >= 3));
-
-    const calcBbox = (polys: NormalizedPolygon[]) => {
-      let minLng = Number.POSITIVE_INFINITY;
-      let minLat = Number.POSITIVE_INFINITY;
-      let maxLng = Number.NEGATIVE_INFINITY;
-      let maxLat = Number.NEGATIVE_INFINITY;
-      polys.forEach((poly) =>
-        poly.forEach((ring) =>
-          ring.forEach(([lng, lat]) => {
-            minLng = Math.min(minLng, lng);
-            minLat = Math.min(minLat, lat);
-            maxLng = Math.max(maxLng, lng);
-            maxLat = Math.max(maxLat, lat);
-          })
-        )
-      );
-      if (!Number.isFinite(minLng) || !Number.isFinite(minLat) || !Number.isFinite(maxLng) || !Number.isFinite(maxLat)) {
-        return [-180, -90, 180, 90] as [number, number, number, number];
-      }
-      return [minLng, minLat, maxLng, maxLat] as [number, number, number, number];
     };
 
     const sources = [
@@ -114,16 +75,14 @@ const MapPage: React.FC = () => {
           const props = f.properties || {};
           const code = String(props.adcode || props.parent?.adcode || (props.acroutes || []).slice(-1)[0] || "");
           const normalized = code.slice(0, 2).padEnd(6, "0");
-          const polygons = simplifyPolygons(normalizePolygons(f.geometry));
+          const polygons = normalizePolygons(f.geometry);
           if (!polygons.length) return;
-          const bbox = calcBbox(polygons);
           const list = provinceFeaturesRef.current.get(normalized) || [];
-          list.push({ polygons, bbox });
+          list.push({ polygons });
           provinceFeaturesRef.current.set(normalized, list);
         });
         if (provinceFeaturesRef.current.size > 0) {
           console.log("GeoJSON loaded from", src, "provinces:", provinceFeaturesRef.current.size);
-          provinceCacheRef.current.clear();
           setGeoLoaded(true);
           setGeoError(null);
           return;
@@ -134,64 +93,6 @@ const MapPage: React.FC = () => {
     }
     setGeoError("省份边界加载失败，请刷新重试");
   }, []);
-
-  const pointInRing = React.useCallback((point: [number, number], ring: [number, number][]) => {
-    let inside = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const xi = ring[i][0];
-      const yi = ring[i][1];
-      const xj = ring[j][0];
-      const yj = ring[j][1];
-      const intersect = yi > point[1] !== yj > point[1] && point[0] < ((xj - xi) * (point[1] - yi)) / ((yj - yi) || 1e-9) + xi;
-      if (intersect) inside = !inside;
-    }
-    return inside;
-  }, []);
-
-  const pointInPolygon = React.useCallback(
-    (point: [number, number], polygon: NormalizedPolygon) => {
-      if (!polygon || polygon.length === 0) return false;
-      let inside = false;
-      polygon.forEach((ring, idx) => {
-        if (ring.length < 3) return;
-        if (pointInRing(point, ring)) {
-          inside = idx === 0 ? true : !inside;
-        }
-      });
-      return inside;
-    },
-    [pointInRing]
-  );
-
-  const findProvinceByPoint = React.useCallback(
-    (lng: number, lat: number) => {
-      const cacheKey = `${lng.toFixed(3)},${lat.toFixed(3)}`;
-      if (provinceCacheRef.current.has(cacheKey)) {
-        return provinceCacheRef.current.get(cacheKey) as string | null;
-      }
-
-      let matched: string | null = null;
-      for (const [code, feats] of provinceFeaturesRef.current.entries()) {
-        let hit = false;
-        for (const feat of feats) {
-          const [minLng, minLat, maxLng, maxLat] = feat.bbox;
-          if (lng < minLng || lng > maxLng || lat < minLat || lat > maxLat) continue;
-          for (const poly of feat.polygons) {
-            if (pointInPolygon([lng, lat], poly)) {
-              matched = code;
-              hit = true;
-              break;
-            }
-          }
-          if (hit) break;
-        }
-        if (matched) break;
-      }
-      provinceCacheRef.current.set(cacheKey, matched);
-      return matched;
-    },
-    [pointInPolygon]
-  );
 
   const drawProvince = React.useCallback(
     (adcode: string, targetPolygons?: Map<string, any[]>) => {
@@ -261,7 +162,6 @@ const MapPage: React.FC = () => {
         provincePolygonsRef.current.forEach((polys) => polys.forEach((p) => p.setMap(null)));
         provincePolygonsRef.current.clear();
         visitedCodesRef.current = new Set();
-        provinceCacheRef.current.clear();
 
         const markerInstances: any[] = [];
         const countCache: Record<string, number> = {};
@@ -358,8 +258,9 @@ const MapPage: React.FC = () => {
           }
           markerInstances.push(marker);
 
-          const provinceCode = findProvinceByPoint(m.lng, m.lat);
-          if (provinceCode) {
+          const adcode = m.adcode ? String(m.adcode) : "";
+          if (adcode) {
+            const provinceCode = adcode.slice(0, 2).padEnd(6, "0");
             localVisited.add(provinceCode);
           }
         }
@@ -380,7 +281,7 @@ const MapPage: React.FC = () => {
         }
       }
     },
-    [refreshProvinces, markerFilters, findProvinceByPoint]
+    [refreshProvinces, markerFilters]
   );
 
   const initMap = React.useCallback(() => {
@@ -479,16 +380,16 @@ const MapPage: React.FC = () => {
 
   // 6. 初始化地图（当 AMap 与 GeoJSON 准备好时）
   React.useEffect(() => {
-    if (mapReady && window.AMap && geoLoaded && !mapInitialized.current) {
+    if (mapReady && window.AMap && geoReady && !mapInitialized.current) {
       initMap();
     }
-  }, [mapReady, geoLoaded, initMap]);
+  }, [mapReady, geoReady, initMap]);
 
   // 7. mapItems 更新时强制刷新地图标记（确保新数据同步）
   React.useEffect(() => {
-    if (!mapInitialized.current || !window.AMap) return;
+    if (!mapInitialized.current || !window.AMap || !geoReady || !mapReady) return;
     buildMarkers(markers);
-  }, [mapItems]);
+  }, [markers, geoReady, mapReady, buildMarkers]);
 
   // 8. markers 筛选器变化时更新标记可见性
   React.useEffect(() => {

@@ -92,6 +92,7 @@ class MapMarker(BaseModel):
     timestamp: str
     snippet: str
     image: Optional[str] = None
+    adcode: Optional[str] = None
 
 
 class MapResponse(BaseModel):

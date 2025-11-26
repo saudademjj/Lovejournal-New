@@ -34,10 +34,11 @@ export interface MapMarker {
   timestamp: string;
   snippet: string;
   image?: string | null;
+  adcode?: string | null;
 }
 
 export interface MapResponse {
   markers: MapMarker[];
-   version: number;
-   unchanged?: boolean;
+  version: number;
+  unchanged?: boolean;
 }

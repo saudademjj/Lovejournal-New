@@ -19,7 +19,10 @@ geo_helper = GeoHelper(settings.amap_key)
 def _resolve_coords(location: str | None, lat: float | None, lng: float | None):
     if lat is not None and lng is not None:
         return float(lat), float(lng)
-    return geo_helper.parse_coords_from_location(location)
+    parsed = geo_helper.parse_coords_from_location(location)
+    if parsed:
+        return float(parsed[0]), float(parsed[1])
+    return None
 
 
 def _tag_clause(column, tag: str):
@@ -52,6 +55,7 @@ async def _build_map_markers(
         image_col,
         lat_col,
         lng_col,
+        adcode_col,
     ):
         stmt = select(
             model.id.label("id"),
@@ -65,6 +69,7 @@ async def _build_map_markers(
             image_col.label("image"),
             lat_col.label("lat"),
             lng_col.label("lng"),
+            adcode_col.label("adcode"),
         ).where(
             or_(
                 func.length(func.trim(location_col)) > 0,
@@ -99,6 +104,7 @@ async def _build_map_markers(
             literal(None),
             Entry.lat,
             Entry.lng,
+            Entry.adcode,
         )
 
     if include_keydate:
@@ -114,6 +120,7 @@ async def _build_map_markers(
             literal(None),
             KeyDate.lat,
             KeyDate.lng,
+            KeyDate.adcode,
         )
 
     if include_photo:
@@ -129,6 +136,7 @@ async def _build_map_markers(
             (literal("/uploads/") + Photo.filename),
             Photo.lat,
             Photo.lng,
+            Photo.adcode,
         )
 
     if not selects:
@@ -157,6 +165,7 @@ async def _build_map_markers(
                 timestamp=ts.isoformat(),
                 snippet=str(snippet_src)[:120],
                 image=row.get("image"),
+                adcode=row.get("adcode"),
             )
         )
     return markers

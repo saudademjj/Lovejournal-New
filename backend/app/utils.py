@@ -5,6 +5,7 @@ from typing import Optional
 import httpx
 
 tag_pattern = re.compile(r"#([\\w\\u4e00-\\u9fa5]+)")
+GeoResult = tuple[float, float, str | None]
 
 
 def extract_tags(*texts: Optional[str]) -> list[str]:
@@ -32,9 +33,9 @@ class GeoHelper:
     def __init__(self, amap_key: str):
         self.amap_key = amap_key
         self.coord_number_re = re.compile(r"(-?\\d+(?:\\.\\d+)?)")
-        self.geocode_cache: dict[str, tuple[float, float] | None] = {}
+        self.geocode_cache: dict[str, GeoResult | None] = {}
 
-    def parse_coords_from_location(self, location_text: str | None):
+    def parse_coords_from_location(self, location_text: str | None) -> GeoResult | None:
         if not location_text:
             return None
         text = str(location_text).replace("，", ",")
@@ -47,11 +48,11 @@ class GeoHelper:
             if abs(lat) > 90 and abs(lng) <= 90:
                 # swap if reversed
                 lat, lng = lng, lat
-            return lat, lng
+            return lat, lng, None
         except ValueError:
             return None
 
-    async def geocode_location(self, location_text: str):
+    async def geocode_location(self, location_text: str) -> GeoResult | None:
         if not location_text:
             return None
         if location_text in self.geocode_cache:
@@ -71,18 +72,26 @@ class GeoHelper:
         geocodes = data.get("geocodes") or [] if isinstance(data, dict) else []
         if data.get("status") == "1" and geocodes:
             loc = geocodes[0].get("location", "")
+            adcode = (
+                str(
+                    geocodes[0].get("addressComponent", {}).get("adcode")
+                    or geocodes[0].get("adcode")
+                    or ""
+                ).strip()
+                or None
+            )
             nums = self.coord_number_re.findall(loc)
             if len(nums) >= 2:
                 try:
                     lng, lat = float(nums[0]), float(nums[1])
-                    result = (lat, lng)
+                    result = (lat, lng, adcode)
                 except ValueError:
                     result = None
 
         self.geocode_cache[location_text] = result
         return result
 
-    async def resolve_location(self, location_text: str | None):
+    async def resolve_location(self, location_text: str | None) -> GeoResult | None:
         coords = self.parse_coords_from_location(location_text)
         if coords:
             return coords
@@ -92,7 +101,7 @@ class GeoHelper:
         location_text = (location_text or "").strip()
         coords_text = (coords_text or "").strip()
 
-        def parse_coords_text(text: str):
+        def parse_coords_text(text: str) -> GeoResult | None:
             nums = self.coord_number_re.findall(text.replace("，", ","))
             if len(nums) < 2:
                 return None
@@ -101,7 +110,7 @@ class GeoHelper:
                 lng = float(nums[1])
                 if abs(lat) > 90 and abs(lng) <= 90:
                     lat, lng = lng, lat
-                return lat, lng
+                return lat, lng, None
             except ValueError:
                 return None
 
@@ -110,7 +119,7 @@ class GeoHelper:
             coords_pair = await self.resolve_location(location_text)
 
         if coords_pair:
-            lat, lng = coords_pair
+            lat, lng = coords_pair[0], coords_pair[1]
             coords_str = f"{lat:.6f},{lng:.6f}"
             if location_text:
                 return f"{coords_str} {location_text}"
