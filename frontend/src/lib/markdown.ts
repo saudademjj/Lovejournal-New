@@ -8,5 +8,5 @@ marked.setOptions({
 export const renderMarkdown = (text?: string) => {
   if (!text) return "";
   const html = marked.parse(text);
-  return DOMPurify.sanitize(html);
+    return DOMPurify.sanitize(html);
 };
