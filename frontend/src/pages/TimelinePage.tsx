@@ -144,7 +144,7 @@ const TimelinePage: React.FC = () => {
   const handleAutoGeo = async () => {
     const query = form.location.trim();
     if (!query) {
-      setError("请输入地点再尝试自动匹配");
+      //setError("请输入地点再尝试自动匹配");
       return;
     }
     try {
@@ -334,15 +334,22 @@ const TimelinePage: React.FC = () => {
       {modalState && (
         <>
           <div id="modal-backdrop" className="modal-backdrop active" onClick={closeModal}></div>
-          <dialog id="input-modal" open aria-modal="true" aria-labelledby="modal-title">
+          <dialog
+              id="input-modal"
+              open
+              aria-modal="true"
+              aria-labelledby="modal-title"
+              className="w-full max-w-md p-8 rounded-xl shadow-2xl"
+          >
             <button className="modal-close" type="button" onClick={closeModal} aria-label="Close">
               &times;
             </button>
-            <h3 id="modal-title" className="modal-title">
+            <h3 id="modal-title" className="modal-title text-center mb-4 mt-4 text-2xl">
               {modalState.mode === "edit" ? "EDIT" : modalState.type === "entry" ? "THOUGHT" : modalState.type === "photo" ? "VISUAL" : "MEMORY"}
             </h3>
-            <form onSubmit={handleSubmit} className="modal-form-content">
+            <form onSubmit={handleSubmit} className="modal-form-content,flex flex-col gap-4">
               <label
+                className="flex flex-col gap-1"
                 style={{
                   fontSize: "0.7rem",
                   textTransform: "uppercase",
@@ -373,11 +380,11 @@ const TimelinePage: React.FC = () => {
                     value={form.content}
                     onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
                   />
-                  <div className="geo-row">
+                  <div className="geo-row flex items-center gap-2">
                     <Input
                       name="location"
-                      placeholder="Where (optional)"
-                      className="modal-field"
+                      placeholder="Where"
+                      className="modal-field font-mono text-sm leading-relaxed placeholder:text-white/60 placeholder:drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] "
                       value={form.location}
                       onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
                     />
@@ -397,16 +404,16 @@ const TimelinePage: React.FC = () => {
                   <Input
                     name="title"
                     placeholder="Title"
-                    className="modal-field"
+                    className="modal-field font-mono text-sm leading-relaxed placeholder:text-white/60 placeholder:drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
                     required
                     value={form.title}
                     onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                   />
-                  <div className="geo-row">
+                  <div className="geo-row flex items-center gap-2">
                     <Input
                       name="location"
-                      placeholder="Where (optional)"
-                      className="modal-field"
+                      placeholder="Where "
+                      className="modal-field font-mono text-sm leading-relaxed placeholder:text-white/60 placeholder:drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] "
                       value={form.location}
                       onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
                     />
@@ -434,16 +441,15 @@ const TimelinePage: React.FC = () => {
                   <Input
                     name="caption"
                     placeholder="Caption"
-                    className="modal-field"
-                    style={{ marginTop: "6px" }}
+                    className="modal-field font-mono text-sm leading-relaxed placeholder:text-white/60 placeholder:drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] "
                     value={form.caption}
                     onChange={(e) => setForm((f) => ({ ...f, caption: e.target.value }))}
                   />
-                  <div className="geo-row">
+                  <div className="geo-row flex items-center gap-2">
                     <Input
                       name="location"
-                      placeholder="Where (optional)"
-                      className="modal-field"
+                      placeholder="Where"
+                      className="modal-field font-mono text-sm leading-relaxed placeholder:text-white/60 placeholder:drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] "
                       value={form.location}
                       onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
                     />
