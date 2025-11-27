@@ -7,6 +7,7 @@ export default {
         sans: ["Inter", "ui-sans-serif", "system-ui"],
         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular"],
         display: ["Space Grotesk", "Inter", "sans-serif"],
+        noto: ['"Noto Sans SC"', "sans-serif"],
       },
       colors: {
         bg: "#030303",
