@@ -1,6 +1,6 @@
 # LoveJournal New
 
-<p align="right">中文 | <a href="https://github.com/saudademjj/Lovejournal-New/tree/codex/readme-en">English</a></p>
+<p align="right">中文 | <a href="https://github.com/saudademjj/Lovejournal-New/tree/en/readme">English</a></p>
 
 `LoveJournal New` 是 `LoveJournal` 的重构版本，采用前后端分离架构，将“恋爱日记 / 照片 / 纪念日 / 时间轴 / 地图”这些能力拆分为独立 API 和现代前端应用，方便继续演进与部署。
 
