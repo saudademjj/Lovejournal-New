@@ -1,8 +1,8 @@
 <div align="center">
-  <a href="./README.md">简体中文</a> | <a href="./README_en.md">English</a>
+  <a href="./README_en.md">English</a> | 简体中文
 </div>
 
-# LoveJournal (生活记录与空间记忆系统 / LoveJournal Life Record & Spatial Memory System)
+# LoveJournal (生活记录与空间记忆系统)
 
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi)
 ![React](https://img.shields.io/badge/React-19.0-61DAFB?style=flat-square&logo=react)
@@ -11,84 +11,68 @@
 ![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=flat-square&logo=vite)
 ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-3.4-06B6D4?style=flat-square&logo=tailwind-css)
 
-本项目是一款融合地理位置索引与流式时间轴的全栈生活记录应用。系统突破了传统文本日记的单一维度，通过集成高德地图 (AMap) JS API 与 自动化的图片 Exif 元数据解析，实现了记录在“时间”与“空间”两个坐标轴上的精准沉淀，为用户提供具备空间感的回忆回溯体验。
+本项目是一款深度集成地理位置索引与流式时间轴的全栈生活记录应用。系统旨在突破传统文本日记的单一维度，通过高德地图 API 的空间可视化与 自动化的图片 Exif 元数据解析，构建一个具备空间张力的“数字记忆宫殿”。
 
-This project is a full-stack life record application that integrates geographic indexing with a fluid waterfall timeline. Moving beyond the single dimension of traditional diaries, the system achieves precise accumulation across both time and space by integrating the AMap JS API and automated Exif metadata parsing, providing a spatial sense of memory recall.
+## 核心架构与技术实现
 
-## 核心架构方案 / Core Architectural Design
+### 1. 异步高性能后端
+后端基于 **FastAPI** 异步框架构建，全面适配 Python 的 `async/await` 原语。
+- **非阻塞持久层**: 采用 `SQLAlchemy 2.0 (Async mode)` 配合 `asyncpg` 驱动，实现了 PostgreSQL 数据库的高效并发交互。
+- **自动化元数据治理**: 后端内置图片处理管道，在上传阶段自动提取并校准 Exif 中的 GPS 坐标与拍摄时间，实现记录的自动化地理归档。
 
-### 1. 异步高性能后端 (Async High-Performance Backend)
-- **FastAPI 生态**: 核心采用 FastAPI 异步框架，充分利用 Python 的 `async/await` 特性处理 I/O 密集型任务。 / Fully leveraging Python's async features for I/O tasks.
-- **异步持久层**: 配合 `SQLAlchemy 2.0 (Async mode)` 与 `asyncpg` 驱动，实现了非阻塞式的 PostgreSQL 数据库交互。 / Non-blocking DB interactions with SQLAlchemy 2.0 Async & asyncpg.
+### 2. 空间记忆可视化
+- **地图驱动交互**: 深度封装高德地图 (AMap) JS API 2.0，实现了海量记录点的聚合展示与实时跳转。
+- **地理索引优化**: 在数据库层面针对记录的地理坐标字段建立 GIST 空间索引，保障了在大规模数据下的地图检索效率。
 
-### 2. 时空关联数据治理 (Spatial-Temporal Data Management)
-- **自动坐标提取**: 后端集成了 Exif 解析逻辑，在图片上传阶段自动识别 GPS 信息并校准。 / Automated GPS extraction and calibration during image upload.
-- **地理索引优化**: 在数据库层面针对 `location` 字段建立 GIST 或专用索引，保障地图聚合查询的响应速度。 / Geo-indexing for optimized spatial aggregation queries.
+### 3. 响应式前端体验
+- **React 19 并发渲染**: 利用最新的并发特性优化瀑布流列表的加载表现，确保视图切换的丝滑感。
+- **现代化 UI 标准**: 结合 Radix UI 与 Tailwind CSS 构建具备高度语义化与响应式适配的交互界面。
 
-### 3. 现代化前端交互 (Modern Frontend Interaction)
-- **瀑布流时间轴**: 结合 React 19 的并发特性，实现平滑的内容加载与视图渲染。 / Smooth content loading via React 19 concurrent features.
-- **交互式地图看板**: 深度封装高德地图 API，支持自定义海量点标记 (MassMarks) 与信息窗体关联。 / Deeply encapsulated AMap API for customized markers and info-windows.
-
-## 技术栈拆解 / Technical Stack Analysis
-
-| 层级 / Layer | 技术选型 / Tech Selection | 核心用途 / Purpose |
-| :--- | :--- | :--- |
-| **后端 API** | FastAPI / Python 3.11 | 提供低延迟的异步 RESTful 接口。 / Low-latency async interfaces. |
-| **持久层** | SQLAlchemy / Alembic | 实现类型安全的 ORM 映射与自动化的模式迁移。 / Type-safe ORM & migration. |
-| **前端框架** | React 19 / Vite | 组件化视图治理与极速的热更新体验。 / Component-based UI & fast HMR. |
-| **安全认证** | Jose (JWT) / Bcrypt | 基于无状态令牌的身份验证与密码哈希存储。 / Stateless JWT auth & hashing. |
-| **空间数据** | AMap JS API 2.0 | 提供地理围栏计算、坐标转化与交互式渲染。 / Geo-fencing & rendering. |
-
-## 项目结构图 / Project Structure
+## 项目工程结构
 
 ```text
 Lovejournal-New/
-├── backend/                # 异步后端工程核心 / Async Backend Core
+├── backend/                # 异步后端工程核心
 │   ├── app/
-│   │   ├── routers/        # 模块化业务路由 (Auth, Map, Entries, etc.) / Business routes
-│   │   ├── models.py       # SQLAlchemy 强类型实体定义 / Typed DB entities
-│   │   ├── schemas.py      # 基于 Pydantic 的入参契约与响应模型 / Data contracts
-│   │   └── utils.py        # 地理编码、图片处理与认证工具类 / Core utilities
-│   ├── migrations/         # Alembic 版本控制脚本 / Migration scripts
-│   ├── requirements.txt    # 依赖清单 / Dependency list
-│   └── main.py             # 异步 Web 服务引导程序 / Web service entry
-├── frontend/               # 现代前端工程实现 / Modern Frontend App
+│   │   ├── routers/        # 模块化业务路由 (认证、记录管理、地图聚合)
+│   │   ├── models.py       # SQLAlchemy 异步数据模型
+│   │   ├── schemas.py      # 基于 Pydantic 的入参校验与响应定义
+│   │   └── utils.py        # 地理编码、图片处理与 JWT 工具类
+│   ├── migrations/         # Alembic 数据库版本控制
+│   ├── requirements.txt    # 依赖清单
+│   └── main.py             # 应用引导程序
+├── frontend/               # React 前端工程实现
 │   ├── src/
-│   │   ├── components/     # UI 原子组件与地图业务组件 / Components
-│   │   ├── hooks/          # 自定义数据拉取与地图实例化 Hook / Custom hooks
-│   │   └── pages/          # 路由容器页面 / View pages
-│   └── vite.config.ts      # 模块化构建与代理配置 / Build & Proxy config
-└── docker-compose.yml      # 全栈部署与环境编排 / Deployment orchestration
+│   │   ├── components/     # UI 原子组件与地图业务逻辑组件
+│   │   ├── hooks/          # 封装 AMap 实例管理与数据拉取逻辑
+│   │   └── pages/          # 路由容器页面
+│   └── vite.config.ts      # 构建与代理配置
+└── docker-compose.yml      # 全栈容器化部署编排
 ```
 
-## 快速运行指南 / Quick Start
+## 快速运行指南
 
-### 1. 配置环境变量 / Environment Setup
-在 `backend` 目录下创建 `.env`：
+### 1. 环境准备
+在 `backend` 目录下创建 `.env` 文件：
 ```env
 DATABASE_URL=postgresql+asyncpg://user:password@localhost/lovejournal
-SECRET_KEY=your_secure_random_string
-AMAP_KEY=your_amap_js_api_key
+SECRET_KEY=your_secure_string
+AMAP_KEY=your_amap_api_key
 ```
 
-### 2. 运行服务端 / Launch Backend
+### 2. 后端部署
 ```bash
 cd backend
 pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload
 ```
 
-### 3. 运行客户端 / Launch Frontend
+### 3. 前端部署
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-## 未来路线 / Roadmap
-- [ ] 增加多用户协作模式 (Partner Collaboration Mode)。
-- [ ] 引入 AI 语义分析，自动生成年度情感总结报告 (AI-driven Emotional Summary)。
-- [ ] 实现离线缓存与 PWA 支持 (Offline Support & PWA)。
-
-## 许可证 / License
-本项目遵循 MIT License。 / Licensed under the MIT License.
+## 许可证
+本项目遵循 MIT License 协议。
