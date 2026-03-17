@@ -1,6 +1,7 @@
+English | [简体中文](README.md)
+
 # LoveJournal New
 
-English | [简体中文](README.md)
 
 `LoveJournal New` is the rebuilt version of `LoveJournal`, redesigned as a split frontend and backend application. It turns journaling, photo management, anniversaries, timelines, and map views into a modern web stack that is easier to scale and maintain.
 
