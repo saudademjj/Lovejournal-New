@@ -8,71 +8,66 @@
 ![React](https://img.shields.io/badge/React-19.0-61DAFB?style=flat-square&logo=react)
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00?style=flat-square&logo=sqlalchemy)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql)
-![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=flat-square&logo=vite)
-![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-3.4-06B6D4?style=flat-square&logo=tailwind-css)
 
-This project is a full-stack life recording application deeply integrated with geographic indexing and a fluid timeline. Designed to break the single dimension of traditional text diaries, the system leverages spatial visualization via the AMap API and automated image Exif metadata parsing to construct a "Digital Memory Palace" with spatial depth.
+A full-stack life recording application that merges geographic indexing with a fluid waterfall timeline. By integrating the AMap API and automated Exif metadata parsing, the system aligns memories across both temporal and spatial dimensions, constructing an intuitive digital storage solution for personal history.
 
-## Core Architecture & Technical Implementation
+## 🌟 Core Architectural Features
 
 ### 1. Asynchronous High-Performance Backend
-The backend is built on the **FastAPI** asynchronous framework, fully embracing Python's `async/await` primitives.
-- **Non-blocking Persistence**: Utilizes `SQLAlchemy 2.0 (Async mode)` with the `asyncpg` driver, achieving efficient concurrent interactions with the PostgreSQL database.
-- **Automated Metadata Governance**: Features an integrated image processing pipeline that automatically extracts and calibrates GPS coordinates and timestamps from Exif data during upload, enabling automated geographic archiving.
+- **Async I/O Driven**: Built on **FastAPI**, the backend utilizes an asynchronous programming model to handle high-frequency image uploads and geocoding requests, ensuring high throughput per instance.
+- **Non-blocking Persistence**: Paired with `SQLAlchemy 2.0` in Async mode and the `asyncpg` driver, it achieves non-blocking database interactions, mitigating connection pool bottlenecks under concurrent access.
 
-### 2. Spatial Memory Visualization
-- **Map-driven Interaction**: Deeply encapsulates the AMap JS API 2.0, enabling aggregated display and real-time navigation across massive record points.
-- **Geo-index Optimization**: Implements GIST spatial indexing on coordinate fields at the database level, ensuring high retrieval efficiency even with large-scale datasets.
+### 2. Spatial-Temporal Data Governance
+- **Automated Coordinate Correction**: Built-in geographic information extraction. When GPS-tagged images are uploaded, the backend automatically captures and converts coordinates to the GCJ-02 system used by AMap.
+- **Spatial Retrieval Optimization**: Implements GIST indexing on `location` fields at the PostgreSQL level, ensuring millisecond-level map cluster retrieval even with large datasets.
 
-### 3. Responsive Frontend Experience
-- **React 19 Concurrent Rendering**: Leverages the latest concurrent features to optimize waterfall list loading performance, ensuring fluid view transitions.
-- **Modern UI Standards**: Combines Radix UI and Tailwind CSS to build a highly semantic and responsive interface.
+### 3. Concurrency-First Frontend
+- **React 19 Concurrent Mode**: Optimizes the rendering cadence of the waterfall list. Hooks like `useTransition` ensure that complex view switches do not block user interactions.
+- **Deep Map Interaction**: Encapsulates AMap JS API 2.0 components for point clustering and custom overlays, creating a feedback loop where "clicking the map navigates to the specific memory."
 
-## Project Structure
+## 📂 Project Structure
 
 ```text
 Lovejournal-New/
 ├── backend/                # Async Backend Core
 │   ├── app/
-│   │   ├── routers/        # Modular routes (Auth, Record Management, Map Aggregation)
-│   │   ├── models.py       # SQLAlchemy async data models
-│   │   ├── schemas.py      # Pydantic-based validation and response models
-│   │   └── utils.py        # Geocoding, image processing, and JWT utilities
-│   ├── migrations/         # Alembic database versioning
-│   ├── requirements.txt    # Dependency manifest
-│   └── main.py             # Application entry point
-├── frontend/               # React Frontend Implementation
+│   │   ├── routers/        # Modular business routes (Auth, Entries, Map, Timeline)
+│   │   ├── models.py       # SQLAlchemy async model definitions
+│   │   ├── schemas.py      # Pydantic validation and data conversion models
+│   │   └── utils.py        # Utilities for geocoding, Exif, and JWT
+│   ├── alembic/            # Database schema version control
+│   └── requirements.txt    # Pinpointed dependency manifest
+├── frontend/               # Modern Frontend Application
 │   ├── src/
-│   │   ├── components/     # UI primitives and map-specific components
-│   │   ├── hooks/          # AMap instance management and data fetching
-│   │   └── pages/          # Route container pages
-│   └── vite.config.ts      # Build and proxy configuration
-└── docker-compose.yml      # Full-stack containerization orchestration
+│   │   ├── components/     # UI primitives, Map wrappers, and Waterfall containers
+│   │   ├── hooks/          # Custom data fetching and Map instantiation
+│   │   └── pages/          # Dynamically imported route containers
+│   └── vite.config.ts      # Build config with API proxies and optimizations
+└── docker-compose.yml      # One-click environmental orchestration
 ```
 
-## Quick Start
+## 🚀 Quick Start
 
-### 1. Environment Setup
-Create a `.env` file in the `backend` directory:
-```env
-DATABASE_URL=postgresql+asyncpg://user:password@localhost/lovejournal
-SECRET_KEY=your_secure_string
-AMAP_KEY=your_amap_api_key
-```
+### 1. Prerequisites
+Ensure Python 3.11+, Node.js 20+, and PostgreSQL 16 are installed.
 
-### 2. Backend Deployment
+### 2. Launch Services
 ```bash
+# Backend Launch
 cd backend
 pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-### 3. Frontend Deployment
-```bash
+# Frontend Launch
 cd frontend
 npm install
 npm run dev
 ```
 
+## 🗺️ Roadmap
+- [ ] **AI Memoirs**: Integrate LLMs for semantic analysis of journal entries to generate weekly emotional reports.
+- [ ] **Distributed Storage**: Support syncing image assets to S3 or other cloud object storage services.
+- [ ] **Couple Collaboration**: Implement bi-directional account binding and real-time content sharing.
+
 ## License
-This project is licensed under the MIT License.
+MIT License
