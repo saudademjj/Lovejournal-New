@@ -1,73 +1,144 @@
 <div align="center">
-  <a href="./README_en.md">English</a> | 简体中文
+  <p>A Modern, High-Performance Life Journaling System / 现代高性能生活记录系统</p>
+  <p>
+    <a href="#english">English</a> •
+    <a href="#简体中文">简体中文</a>
+  </p>
 </div>
 
-# LoveJournal (生活记录与空间记忆系统)
+---
 
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi)
-![React](https://img.shields.io/badge/React-19.0-61DAFB?style=flat-square&logo=react)
-![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00?style=flat-square&logo=sqlalchemy)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql)
+<h2 id="english">🇬🇧 English</h2>
 
-本项目是一个融合了地理位置索引与流式时间轴的全栈记录应用。通过集成高德地图 API 与自动化的 Exif 元数据解析，系统实现了记录在“时间”与“空间”维度的双重对齐，构建了一个直观、高效的数字化记忆存储方案。
+# LoveJournal-New (FastAPI + React 19)
 
-## 🌟 核心工程架构
+**LoveJournal-New** is the modernized, high-performance evolution of the original LoveJournal system. Fully rewritten with a decoupled frontend-backend architecture, it offers a smoother, app-like experience for documenting your life's most precious moments, photos, and anniversaries.
 
-### 1. 异步高性能后端
-- **异步 I/O 驱动**: 后端基于 **FastAPI** 构建，全面采用异步编程模型。利用 `async/await` 原语处理高频的图片上传与地理编码请求，确保单一实例的高吞吐量。
-- **非阻塞持久层**: 配合 `SQLAlchemy 2.0` 的 Async 模式与 `asyncpg` 驱动，实现了数据库访问的非阻塞化，极大缓解了并发访问下的连接池瓶颈。
+### ✨ Core Features
 
-### 2. 时空关联的数据治理
-- **自动化坐标修复**: 系统内置地理信息提取逻辑。当用户上传包含 GPS 信息的图片时，后端自动通过 `piexif` 等工具抓取坐标并转换为高德地图适用的 GCJ-02 坐标系。
-- **空间检索优化**: 在 PostgreSQL 层面针对 `location` 字段建立索引，支持在大规模数据量下实现毫秒级的地图聚合点检索。
+- **Modern Architecture**: Decoupled design featuring a blazing-fast backend and a highly responsive frontend.
+- **Secure Authentication**: JWT-based stateless authentication for safe and secure access to your memories.
+- **Rich Data Aggregation**: A unified, paginated timeline aggregating diaries, photos, and key dates with tag-based filtering.
+- **Interactive Maps**: Advanced geographic visualization using AMAP (Gaode Map) APIs with version-controlled caching for optimal performance.
+- **Media Management**: Robust photo upload capabilities with direct static file serving.
+- **Polished UI/UX**: Built with Tailwind CSS and Framer Motion for beautiful, fluid animations and a consistent aesthetic.
 
-### 3. 并发优先的前端视图
-- **React 19 特性应用**: 利用最新的并发模式优化瀑布流列表的渲染节奏，通过 `useTransition` 等 Hook 确保复杂的视图切换不阻塞用户交互。
-- **地图深度交互**: 封装了基于 AMap JS API 2.0 的点聚合与自定义覆盖物组件，实现了“点击地图即刻跳转至对应回忆”的交互闭环。
+### 🛠 Technology Stack
 
-## 📂 项目结构规范
+- **Backend**: FastAPI, SQLAlchemy, PostgreSQL, Python 3.10+
+- **Frontend**: React (TypeScript), Vite, Tailwind CSS, Zustand (State Management), Framer Motion
+- **Services**: AMAP Geocoding & Map SDK
 
-```text
-Lovejournal-New/
-├── backend/                # 异步后端工程
-│   ├── app/
-│   │   ├── routers/        # 模块化业务路由 (Auth, Entries, Map, Timeline)
-│   │   ├── models.py       # SQLAlchemy 异步模型定义
-│   │   ├── schemas.py      # Pydantic 类型校验与数据转换模型
-│   │   └── utils.py        # 包含地理编码、Exif 处理与 JWT 的工具集
-│   ├── alembic/            # 数据库版本迁移控制
-│   └── requirements.txt    # 精确的版本依赖清单
-├── frontend/               # 现代前端应用
-│   ├── src/
-│   │   ├── components/     # UI 原子组件、地图包装器与瀑布流容器
-│   │   ├── hooks/          # 自定义数据拉取与地图实例化逻辑
-│   │   └── pages/          # 基于动态导入的路由容器
-│   └── vite.config.ts      # 包含 API 代理与性能优化的构建配置
-└── docker-compose.yml      # 一键式环境编排配置文件
+### 🚀 Quick Start
+
+#### 1. Backend Setup (FastAPI)
+
+```bash
+git clone https://github.com/saudademjj/Lovejournal-New.git
+cd Lovejournal-New
+cp backend/.env.example backend/.env
+```
+*Configure your `backend/.env` with your PostgreSQL `DATABASE_URL`, `SECRET_KEY`, and `CORS_ORIGINS`.*
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+*First-time Admin Setup (only if database is empty):*
+```bash
+curl -X POST "http://localhost:8000/api/auth/bootstrap?username=admin&password=pass"
 ```
 
-## 🚀 快速启动指南
+#### 2. Frontend Setup (React)
 
-### 1. 环境准备
-确保已预安装 Python 3.11+, Node.js 20+ 与 PostgreSQL 16。
-
-### 2. 服务部署
 ```bash
-# 后端启动
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-# 前端启动
-cd frontend
+cd ../frontend
 npm install
 npm run dev
 ```
+The application will be accessible at `http://localhost:5173`.
 
-## 🗺️ 未来演进路线
-- [ ] **AI 回忆录**: 集成 LLM 对日记内容进行语义分析，自动生成周度情感总结报告。
-- [ ] **分布式存储**: 支持将图片资产同步至 S3 或其他云端对象存储服务。
-- [ ] **伴侣协同**: 实现多用户间的双向账户绑定与实时内容共享。
+### ⚙️ Environment Variables
 
-## 许可证
-本项目采用 MIT License 协议。
+**Backend (`backend/.env`)**
+- `DATABASE_URL`: PostgreSQL connection string.
+- `SECRET_KEY`: Secure key for JWT signing.
+- `UPLOAD_DIR`: Directory for storing uploaded media.
+- `AMAP_WEB_KEY` / `AMAP_JS_CODE`: Map service API keys.
+
+**Frontend (`frontend/.env`)** *(Optional)*
+- `VITE_API_BASE_URL`: Backend API endpoint (default: `/api`).
+- `VITE_AMAP_JS_KEY` / `VITE_AMAP_WEB_KEY`: Frontend map SDK keys.
+
+---
+
+<h2 id="简体中文">🇨🇳 简体中文</h2>
+
+# LoveJournal-New (FastAPI + React)
+
+**LoveJournal-New** 是对经典版 LoveJournal 的全面重构升级。项目采用了彻底的前后端分离架构，通过引入现代化的技术栈，为用户提供了一个极其流畅、接近原生 App 体验的私密回忆归档平台。
+
+### ✨ 核心特性
+
+- **现代前后端架构**：使用 FastAPI 提供极致的接口响应速度，React 构建高互动性的前端视图。
+- **安全可靠的认证**：基于 JWT（JSON Web Token）的无状态认证机制，保障私密数据安全。
+- **全局时光轴流**：将日记、图库、纪念日深度整合，支持按需分页加载与基于标签的智能筛选。
+- **交互式地图视图**：深度集成高德地图 API，带有版本号的接口设计便于前端实施精准的缓存控制，让足迹展现更加丝滑。
+- **流畅动效与视觉**：结合 Tailwind CSS 和 Framer Motion，打造极具质感的现代 UI 与过渡动画。
+
+### 🛠 技术栈地图
+
+- **后端引擎**：FastAPI, SQLAlchemy ORM, PostgreSQL, Python 3.10+
+- **前端框架**：React + TypeScript, Vite 构建工具, Tailwind CSS, Zustand 状态管理, Framer Motion 动画库
+- **基础设施**：高德地图 JS API 与地理编码服务
+
+### 🚀 快速启动指南
+
+#### 1. 后端服务部署
+
+```bash
+git clone https://github.com/saudademjj/Lovejournal-New.git
+cd Lovejournal-New
+cp backend/.env.example backend/.env
+```
+*请务必修改 `backend/.env` 中的 `DATABASE_URL`、`SECRET_KEY` 以及允许跨域的 `CORS_ORIGINS`。*
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate  # Windows 用户使用: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+*首次运行初始化超级管理员（仅在数据库无用户时有效）：*
+```bash
+curl -X POST "http://localhost:8000/api/auth/bootstrap?username=admin&password=pass"
+```
+
+#### 2. 前端服务运行
+
+```bash
+cd ../frontend
+npm install
+npm run dev
+```
+浏览器默认访问地址：`http://localhost:5173`。
+
+### ⚙️ 核心配置说明
+
+**后端 (`backend/.env`)**
+- `DATABASE_URL`：PostgreSQL 数据库连接串。
+- `SECRET_KEY`：用于签发 JWT 的高强度随机密钥。
+- `UPLOAD_DIR`：图片与静态资源上传存放目录。
+- `AMAP_WEB_KEY` / `AMAP_JS_CODE`：高德地图服务端接口安全密钥。
+
+**前端环境 (`frontend/.env`)** *(可选)*
+- `VITE_API_BASE_URL`：指定后端 API 基础路径（默认为同域 `/api`）。
+- `VITE_AMAP_JS_KEY` / `VITE_AMAP_WEB_KEY`：前端高德 SDK 密钥。
+
+## 📄 许可证
+
+本项目默认供个人学习与私有化部署使用，如需开源分发请遵守相关协议规定。
