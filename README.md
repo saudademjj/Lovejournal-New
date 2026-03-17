@@ -1,10 +1,8 @@
+<a id="readme-top"></a>
+
 # LoveJournal New
 
-**Language:** [Chinese](#chinese-version) | [English](#english-version)
-
-## Chinese Version
-
-**Language:** Chinese | [English](#english-version)
+<p align="right">中文 | <a href="#english-version">English</a></p>
 
 `LoveJournal New` 是 `LoveJournal` 的重构版本，采用前后端分离架构，将“恋爱日记 / 照片 / 纪念日 / 时间轴 / 地图”这些能力拆分为独立 API 和现代前端应用，方便继续演进与部署。
 
@@ -126,7 +124,7 @@ npm run dev
 
 ## English Version
 
-**Language:** [Chinese](#chinese-version) | English
+<p align="right"><a href="#readme-top">中文</a> | English</p>
 
 `LoveJournal New` is the rebuilt version of `LoveJournal`, redesigned as a split frontend and backend application. It turns journaling, photo management, anniversaries, timelines, and map views into a modern web stack that is easier to scale and maintain.
 
