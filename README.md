@@ -1,120 +1,85 @@
-[English](README_en.md) | 简体中文
+# LoveJournal (爱意笔记 - 情感化生活记录系统)
 
-# LoveJournal New
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-19.0-61DAFB?logo=react)](https://react.dev/)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-red?logo=sqlalchemy)](https://www.sqlalchemy.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
 
+LoveJournal 是一款结合时空维度的全栈情感记录应用。它突破了传统文本记录的限制，通过瀑布流时间轴 (Timeline) 与交互式空间地图 (Map) 的多维呈现方式，帮助用户构建数字化的深度记忆宫殿。
 
-`LoveJournal New` 是 `LoveJournal` 的重构版本，采用前后端分离架构，将“恋爱日记 / 照片 / 纪念日 / 时间轴 / 地图”这些能力拆分为独立 API 和现代前端应用，方便继续演进与部署。
+## 核心功能
 
-## 项目定位
+- 多维时间轴: 采用瀑布流渲染技术，支持富文本、图片与情感标签的结构化记录展示。
+- 足迹地图索引: 深度集成高德地图 (AMap) JS API，实现基于地理坐标的记录可视化，点击地图要素即可实现空间维度的记忆溯源。
+- 图像元数据解析: 自动提取并校准上传图片的地理坐标与拍摄时间信息，实现全自动的自动化归档。
+- 高性能异步架构: 
+    - 后端: 采用 FastAPI 异步框架，利用 asyncpg 实现数据库访问的高并发性能。
+    - 存储: 针对地理信息查询，对 location 字段建立专项索引以加速响应。
 
-- 后端：`FastAPI` + `SQLAlchemy` + `PostgreSQL`
-- 前端：`React` + `TypeScript` + `Vite` + `Tailwind CSS`
-- 状态与交互：`Zustand`、`Framer Motion`
+## 技术架构
 
-## 核心能力
+### 后端层 (Backend)
+- 框架: FastAPI (Async Mode)
+- 持久层: SQLAlchemy 2.0
+- 数据库: PostgreSQL
+- 安全架构: OAuth2 + JWT (Bcrypt 存储)
+- 迁移工具: Alembic
 
-- JWT 登录认证
-- 时间轴聚合与分页浏览
-- 日记、照片、纪念日的增删改查
-- 标签筛选与内容管理
-- 地图数据接口与前端地图展示
-- 图片上传与静态文件访问
+### 前端层 (Frontend)
+- 构建工具: Vite
+- 框架: React 19
+- 地理信息: AMap JS API
+- UI 标准: Radix UI + Tailwind CSS
+- 图标集: Lucide React
 
-## 仓库结构
+## 项目结构
 
 ```text
-Lovejournal-New/
-├── backend/
-│   ├── app/
-│   │   ├── routers/
-│   │   ├── models.py
-│   │   ├── schemas.py
-│   │   └── main.py
-│   ├── requirements.txt
-│   └── .env.example
-├── frontend/
-│   ├── src/pages
-│   ├── src/components
-│   ├── src/store
-│   ├── src/lib
+.
+├── backend             # FastAPI 异步后端实现
+│   ├── app
+│   │   ├── routers     # 模块化路由实现 (Auth, Entries, Map, Timeline)
+│   │   ├── models.py   # 数据模型定义
+│   │   ├── schemas.py  # 数据校验契约
+│   │   └── utils.py    # 地理编码与核心工具
+│   └── requirements.txt
+├── frontend            # React 高性能前端
+│   ├── src
+│   │   ├── components  # 业务组件抽象
+│   │   ├── hooks       # 状态逻辑解耦
+│   │   └── pages       # 视图容器
 │   └── package.json
-├── README.md
-└── README.en.md
+└── docker-compose.yml  # 全栈部署编排
 ```
-
-## 环境要求
-
-- Python 3.10+
-- Node.js 18+
-- PostgreSQL 14+
 
 ## 快速开始
 
-### 1. 启动后端
+### 1. 基础配置
+在 `backend` 目录下创建 `.env` 文件：
+```env
+DATABASE_URL=postgresql+asyncpg://user:password@localhost/lovejournal
+SECRET_KEY=your_secure_secret_key
+AMAP_KEY=your_amap_api_key
+```
 
+### 2. 后端部署
 ```bash
-git clone https://github.com/saudademjj/Lovejournal-New.git
-cd Lovejournal-New
-cp backend/.env.example backend/.env
-cd backend
-python -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload
 ```
 
-请重点配置 `backend/.env` 中的 `DATABASE_URL`、`SECRET_KEY` 和 `CORS_ORIGINS`。
-
-首次初始化管理员账号：
-
+### 3. 前端部署
 ```bash
-curl -X POST "http://localhost:8000/api/auth/bootstrap?username=admin&password=pass"
+npm install && npm run dev
 ```
 
-### 2. 启动前端
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-默认前端地址：`http://localhost:5173`
-
-## 关键配置
-
-后端 `.env`：
-
-- `DATABASE_URL`
-- `SECRET_KEY`
-- `ACCESS_TOKEN_EXPIRE_MINUTES`
-- `UPLOAD_DIR`
-- `AMAP_WEB_KEY`
-- `AMAP_JS_CODE`
-- `CORS_ORIGINS`
-
-前端环境变量：
-
-- `VITE_API_BASE_URL`
-- `VITE_AMAP_JS_KEY`
-- `VITE_AMAP_JS_CODE`
-- `VITE_AMAP_WEB_KEY`
-- `VITE_GEOJSON_CDN`
-
-## API 模块
-
-- 认证：`/api/auth/*`
-- 时间轴：`/api/timeline`、`/api/tags`
-- 内容管理：`/api/entries`、`/api/keydates`、`/api/photos`
-- 地图：`/api/map`
-
-## 适合继续扩展的方向
-
-- 多用户协作或共享相册
-- 更丰富的时间轴筛选和搜索
-- 地图轨迹与地点聚类
-- 审计日志和后台管理界面
+## 未来路线
+- 集成 AI 情感分析模块，对日记内容进行智能情绪归类与分析报告生成。
+- 增加共享协同模式，支持双向身份绑定以共享回忆空间。
+- 开发基于原生框架的移动端应用，优化地理位置的后台持续记录能力。
 
 ## 许可证
+本项目采用 MIT License 协议。
 
-本仓库采用 MIT License，详见 [LICENSE](./LICENSE)。
+---
+Developed by [saudademjj](https://github.com/saudademjj)
