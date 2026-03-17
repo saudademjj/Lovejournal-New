@@ -8,71 +8,66 @@
 ![React](https://img.shields.io/badge/React-19.0-61DAFB?style=flat-square&logo=react)
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00?style=flat-square&logo=sqlalchemy)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql)
-![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=flat-square&logo=vite)
-![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-3.4-06B6D4?style=flat-square&logo=tailwind-css)
 
-本项目是一款深度集成地理位置索引与流式时间轴的全栈生活记录应用。系统旨在突破传统文本日记的单一维度，通过高德地图 API 的空间可视化与 自动化的图片 Exif 元数据解析，构建一个具备空间张力的“数字记忆宫殿”。
+本项目是一个融合了地理位置索引与流式时间轴的全栈记录应用。通过集成高德地图 API 与自动化的 Exif 元数据解析，系统实现了记录在“时间”与“空间”维度的双重对齐，构建了一个直观、高效的数字化记忆存储方案。
 
-## 核心架构与技术实现
+## 🌟 核心工程架构
 
 ### 1. 异步高性能后端
-后端基于 **FastAPI** 异步框架构建，全面适配 Python 的 `async/await` 原语。
-- **非阻塞持久层**: 采用 `SQLAlchemy 2.0 (Async mode)` 配合 `asyncpg` 驱动，实现了 PostgreSQL 数据库的高效并发交互。
-- **自动化元数据治理**: 后端内置图片处理管道，在上传阶段自动提取并校准 Exif 中的 GPS 坐标与拍摄时间，实现记录的自动化地理归档。
+- **异步 I/O 驱动**: 后端基于 **FastAPI** 构建，全面采用异步编程模型。利用 `async/await` 原语处理高频的图片上传与地理编码请求，确保单一实例的高吞吐量。
+- **非阻塞持久层**: 配合 `SQLAlchemy 2.0` 的 Async 模式与 `asyncpg` 驱动，实现了数据库访问的非阻塞化，极大缓解了并发访问下的连接池瓶颈。
 
-### 2. 空间记忆可视化
-- **地图驱动交互**: 深度封装高德地图 (AMap) JS API 2.0，实现了海量记录点的聚合展示与实时跳转。
-- **地理索引优化**: 在数据库层面针对记录的地理坐标字段建立 GIST 空间索引，保障了在大规模数据下的地图检索效率。
+### 2. 时空关联的数据治理
+- **自动化坐标修复**: 系统内置地理信息提取逻辑。当用户上传包含 GPS 信息的图片时，后端自动通过 `piexif` 等工具抓取坐标并转换为高德地图适用的 GCJ-02 坐标系。
+- **空间检索优化**: 在 PostgreSQL 层面针对 `location` 字段建立索引，支持在大规模数据量下实现毫秒级的地图聚合点检索。
 
-### 3. 响应式前端体验
-- **React 19 并发渲染**: 利用最新的并发特性优化瀑布流列表的加载表现，确保视图切换的丝滑感。
-- **现代化 UI 标准**: 结合 Radix UI 与 Tailwind CSS 构建具备高度语义化与响应式适配的交互界面。
+### 3. 并发优先的前端视图
+- **React 19 特性应用**: 利用最新的并发模式优化瀑布流列表的渲染节奏，通过 `useTransition` 等 Hook 确保复杂的视图切换不阻塞用户交互。
+- **地图深度交互**: 封装了基于 AMap JS API 2.0 的点聚合与自定义覆盖物组件，实现了“点击地图即刻跳转至对应回忆”的交互闭环。
 
-## 项目工程结构
+## 📂 项目结构规范
 
 ```text
 Lovejournal-New/
-├── backend/                # 异步后端工程核心
+├── backend/                # 异步后端工程
 │   ├── app/
-│   │   ├── routers/        # 模块化业务路由 (认证、记录管理、地图聚合)
-│   │   ├── models.py       # SQLAlchemy 异步数据模型
-│   │   ├── schemas.py      # 基于 Pydantic 的入参校验与响应定义
-│   │   └── utils.py        # 地理编码、图片处理与 JWT 工具类
-│   ├── migrations/         # Alembic 数据库版本控制
-│   ├── requirements.txt    # 依赖清单
-│   └── main.py             # 应用引导程序
-├── frontend/               # React 前端工程实现
+│   │   ├── routers/        # 模块化业务路由 (Auth, Entries, Map, Timeline)
+│   │   ├── models.py       # SQLAlchemy 异步模型定义
+│   │   ├── schemas.py      # Pydantic 类型校验与数据转换模型
+│   │   └── utils.py        # 包含地理编码、Exif 处理与 JWT 的工具集
+│   ├── alembic/            # 数据库版本迁移控制
+│   └── requirements.txt    # 精确的版本依赖清单
+├── frontend/               # 现代前端应用
 │   ├── src/
-│   │   ├── components/     # UI 原子组件与地图业务逻辑组件
-│   │   ├── hooks/          # 封装 AMap 实例管理与数据拉取逻辑
-│   │   └── pages/          # 路由容器页面
-│   └── vite.config.ts      # 构建与代理配置
-└── docker-compose.yml      # 全栈容器化部署编排
+│   │   ├── components/     # UI 原子组件、地图包装器与瀑布流容器
+│   │   ├── hooks/          # 自定义数据拉取与地图实例化逻辑
+│   │   └── pages/          # 基于动态导入的路由容器
+│   └── vite.config.ts      # 包含 API 代理与性能优化的构建配置
+└── docker-compose.yml      # 一键式环境编排配置文件
 ```
 
-## 快速运行指南
+## 🚀 快速启动指南
 
 ### 1. 环境准备
-在 `backend` 目录下创建 `.env` 文件：
-```env
-DATABASE_URL=postgresql+asyncpg://user:password@localhost/lovejournal
-SECRET_KEY=your_secure_string
-AMAP_KEY=your_amap_api_key
-```
+确保已预安装 Python 3.11+, Node.js 20+ 与 PostgreSQL 16。
 
-### 2. 后端部署
+### 2. 服务部署
 ```bash
+# 后端启动
 cd backend
 pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-### 3. 前端部署
-```bash
+# 前端启动
 cd frontend
 npm install
 npm run dev
 ```
 
+## 🗺️ 未来演进路线
+- [ ] **AI 回忆录**: 集成 LLM 对日记内容进行语义分析，自动生成周度情感总结报告。
+- [ ] **分布式存储**: 支持将图片资产同步至 S3 或其他云端对象存储服务。
+- [ ] **伴侣协同**: 实现多用户间的双向账户绑定与实时内容共享。
+
 ## 许可证
-本项目遵循 MIT License 协议。
+本项目采用 MIT License 协议。
