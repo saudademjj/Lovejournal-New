@@ -1,144 +1,157 @@
 <div align="center">
-  <p>A Modern, High-Performance Life Journaling System / 现代高性能生活记录系统</p>
-  <p>
-    <a href="#english">English</a> •
-    <a href="#简体中文">简体中文</a>
-  </p>
+  <a href="./README_en.md">English</a> | 简体中文
 </div>
 
----
+# LoveJournal-New -- 生活记录与空间记忆系统
 
-<h2 id="english">🇬🇧 English</h2>
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi)
+![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react)
+![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00?style=flat-square&logo=sqlalchemy)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql)
+![Vite](https://img.shields.io/badge/Vite-Build-646CFF?style=flat-square&logo=vite)
 
-# LoveJournal-New (FastAPI + React 19)
+一个全栈生活记录应用，将地理空间索引与瀑布流时间线深度融合。通过集成高德地图 API 与自动化 Exif 元数据解析，系统在时间和空间两个维度上对齐记忆，构建直观的个人历史数字存储方案。本项目是 [lovejournal](https://github.com/saudademjj/lovejournal)（Flask 版本）的高性能异步重写版。
 
-**LoveJournal-New** is the modernized, high-performance evolution of the original LoveJournal system. Fully rewritten with a decoupled frontend-backend architecture, it offers a smoother, app-like experience for documenting your life's most precious moments, photos, and anniversaries.
+## 核心功能
 
-### ✨ Core Features
+### 多维记忆管理
+- 支持 Markdown 格式的图文日记，内容渲染经过 DOMPurify 安全净化
+- 无损图片画廊上传与浏览
+- 精确到天的纪念日追踪与倒计时
+- 全局时间轴聚合所有数据类型（日记、照片、纪念日）
 
-- **Modern Architecture**: Decoupled design featuring a blazing-fast backend and a highly responsive frontend.
-- **Secure Authentication**: JWT-based stateless authentication for safe and secure access to your memories.
-- **Rich Data Aggregation**: A unified, paginated timeline aggregating diaries, photos, and key dates with tag-based filtering.
-- **Interactive Maps**: Advanced geographic visualization using AMAP (Gaode Map) APIs with version-controlled caching for optimal performance.
-- **Media Management**: Robust photo upload capabilities with direct static file serving.
-- **Polished UI/UX**: Built with Tailwind CSS and Framer Motion for beautiful, fluid animations and a consistent aesthetic.
+### 地理空间记忆
+- 上传 GPS 标记的图片时，后端自动提取坐标并转换为高德地图使用的 GCJ-02 坐标系
+- PostgreSQL 层面的 GIST 索引优化空间检索，大数据量下仍保持毫秒级地图聚类查询
+- 高德地图 JS API 2.0 深度集成：点聚合、自定义覆盖物、「点击地图定位到具体记忆」的交互闭环
 
-### 🛠 Technology Stack
+### 安全与认证
+- JWT 令牌认证（python-jose + bcrypt）
+- 用户注册与登录
+- 私密数据的访问控制
 
-- **Backend**: FastAPI, SQLAlchemy, PostgreSQL, Python 3.10+
-- **Frontend**: React (TypeScript), Vite, Tailwind CSS, Zustand (State Management), Framer Motion
-- **Services**: AMAP Geocoding & Map SDK
+## 技术架构
 
-### 🚀 Quick Start
+### 异步高性能后端
 
-#### 1. Backend Setup (FastAPI)
+- FastAPI 0.115：异步 I/O 驱动的 Web 框架，处理高频图片上传与地理编码请求
+- SQLAlchemy 2.0 Async 模式 + asyncpg 驱动：非阻塞数据库交互，缓解并发访问下的连接池瓶颈
+- Alembic：数据库 Schema 版本控制与迁移管理
+- Pydantic：请求/响应数据的严格校验与序列化
+- httpx：异步 HTTP 客户端，用于地理编码 API 调用
+
+### 并发优先的前端
+
+- React 18 + Vite：快速的开发构建与热更新
+- React Router 6：客户端路由管理
+- Zustand：轻量级状态管理，替代 Redux 的复杂模板代码
+- Framer Motion + GSAP：流畅的页面过渡与滚动动画
+- Lenis：丝滑的平滑滚动体验
+- Tailwind CSS + Radix UI：响应式布局与无障碍组件
+- Marked + DOMPurify：安全的 Markdown 渲染管线
+- Axios：HTTP 请求封装与拦截器
+
+### 空间数据治理
+
+- 自动坐标校正：上传含 GPS 标签的图片时，后端自动捕获并转换坐标至 GCJ-02 坐标系
+- 空间检索优化：PostgreSQL `location` 字段上的 GIST 索引
+- 地图交互封装：高德地图 JS API 2.0 组件化，支持点聚合与自定义覆盖物
+
+## 目录结构
+
+```text
+Lovejournal-New/
+├── backend/                    # 异步后端核心
+│   ├── app/
+│   │   ├── main.py             # FastAPI 应用入口
+│   │   ├── routers/            # 模块化业务路由
+│   │   │   ├── auth.py         # 认证路由（注册/登录/令牌刷新）
+│   │   │   ├── entries.py      # 日记条目 CRUD
+│   │   │   ├── map.py          # 地图数据与地理编码
+│   │   │   └── timeline.py     # 时间线聚合查询
+│   │   ├── models.py           # SQLAlchemy 异步模型定义
+│   │   ├── schemas.py          # Pydantic 校验与数据转换模型
+│   │   ├── database.py         # 异步数据库连接管理
+│   │   └── utils.py            # 地理编码、Exif 解析、JWT 工具
+│   ├── alembic/                # 数据库 Schema 版本控制
+│   │   └── versions/           # 迁移脚本
+│   └── requirements.txt        # Python 依赖清单
+├── frontend/                   # 现代前端应用
+│   ├── src/
+│   │   ├── components/         # UI 原语、地图封装、瀑布流容器
+│   │   ├── hooks/              # 数据获取与地图实例化
+│   │   ├── pages/              # 动态导入的路由容器
+│   │   ├── store/              # Zustand 状态管理
+│   │   └── utils/              # 工具函数
+│   ├── vite.config.ts          # 构建配置（API 代理与优化）
+│   └── package.json            # 前端依赖
+├── docker-compose.yml          # 一键环境编排
+└── README.md
+```
+
+## 快速开始
+
+### 环境要求
+
+- Python 3.11+
+- Node.js 20+
+- PostgreSQL 16
+
+### 1. 克隆项目
 
 ```bash
 git clone https://github.com/saudademjj/Lovejournal-New.git
 cd Lovejournal-New
-cp backend/.env.example backend/.env
 ```
-*Configure your `backend/.env` with your PostgreSQL `DATABASE_URL`, `SECRET_KEY`, and `CORS_ORIGINS`.*
+
+### 2. 使用 Docker Compose（推荐）
 
 ```bash
+docker compose up -d
+```
+
+### 3. 手动启动
+
+```bash
+# 后端
 cd backend
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-*First-time Admin Setup (only if database is empty):*
-```bash
-curl -X POST "http://localhost:8000/api/auth/bootstrap?username=admin&password=pass"
-```
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-#### 2. Frontend Setup (React)
-
-```bash
-cd ../frontend
+# 前端
+cd frontend
 npm install
 npm run dev
 ```
-The application will be accessible at `http://localhost:5173`.
 
-### ⚙️ Environment Variables
-
-**Backend (`backend/.env`)**
-- `DATABASE_URL`: PostgreSQL connection string.
-- `SECRET_KEY`: Secure key for JWT signing.
-- `UPLOAD_DIR`: Directory for storing uploaded media.
-- `AMAP_WEB_KEY` / `AMAP_JS_CODE`: Map service API keys.
-
-**Frontend (`frontend/.env`)** *(Optional)*
-- `VITE_API_BASE_URL`: Backend API endpoint (default: `/api`).
-- `VITE_AMAP_JS_KEY` / `VITE_AMAP_WEB_KEY`: Frontend map SDK keys.
-
----
-
-<h2 id="简体中文">🇨🇳 简体中文</h2>
-
-# LoveJournal-New (FastAPI + React)
-
-**LoveJournal-New** 是对经典版 LoveJournal 的全面重构升级。项目采用了彻底的前后端分离架构，通过引入现代化的技术栈，为用户提供了一个极其流畅、接近原生 App 体验的私密回忆归档平台。
-
-### ✨ 核心特性
-
-- **现代前后端架构**：使用 FastAPI 提供极致的接口响应速度，React 构建高互动性的前端视图。
-- **安全可靠的认证**：基于 JWT（JSON Web Token）的无状态认证机制，保障私密数据安全。
-- **全局时光轴流**：将日记、图库、纪念日深度整合，支持按需分页加载与基于标签的智能筛选。
-- **交互式地图视图**：深度集成高德地图 API，带有版本号的接口设计便于前端实施精准的缓存控制，让足迹展现更加丝滑。
-- **流畅动效与视觉**：结合 Tailwind CSS 和 Framer Motion，打造极具质感的现代 UI 与过渡动画。
-
-### 🛠 技术栈地图
-
-- **后端引擎**：FastAPI, SQLAlchemy ORM, PostgreSQL, Python 3.10+
-- **前端框架**：React + TypeScript, Vite 构建工具, Tailwind CSS, Zustand 状态管理, Framer Motion 动画库
-- **基础设施**：高德地图 JS API 与地理编码服务
-
-### 🚀 快速启动指南
-
-#### 1. 后端服务部署
-
-```bash
-git clone https://github.com/saudademjj/Lovejournal-New.git
-cd Lovejournal-New
-cp backend/.env.example backend/.env
-```
-*请务必修改 `backend/.env` 中的 `DATABASE_URL`、`SECRET_KEY` 以及允许跨域的 `CORS_ORIGINS`。*
+### 4. 数据库迁移
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate  # Windows 用户使用: .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-*首次运行初始化超级管理员（仅在数据库无用户时有效）：*
-```bash
-curl -X POST "http://localhost:8000/api/auth/bootstrap?username=admin&password=pass"
+alembic upgrade head
 ```
 
-#### 2. 前端服务运行
+## 与 LoveJournal v1 的关系
 
-```bash
-cd ../frontend
-npm install
-npm run dev
-```
-浏览器默认访问地址：`http://localhost:5173`。
+本项目是 [lovejournal](https://github.com/saudademjj/lovejournal)（基于 Flask 的初始版本）的架构升级重写：
 
-### ⚙️ 核心配置说明
+| 维度 | v1 (Flask) | v2 (FastAPI) |
+|------|-----------|--------------|
+| 后端框架 | Flask (同步) | FastAPI (异步) |
+| 数据库驱动 | Flask-SQLAlchemy | SQLAlchemy 2.0 Async + asyncpg |
+| 前端 | Jinja2 SSR + Bootstrap | React 18 SPA + Tailwind CSS |
+| 地图 | 基础地理编码 | 深度地图交互 + 点聚合 + GIST 索引 |
+| 状态管理 | 服务端会话 | JWT + Zustand |
+| 构建工具 | 无 | Vite |
 
-**后端 (`backend/.env`)**
-- `DATABASE_URL`：PostgreSQL 数据库连接串。
-- `SECRET_KEY`：用于签发 JWT 的高强度随机密钥。
-- `UPLOAD_DIR`：图片与静态资源上传存放目录。
-- `AMAP_WEB_KEY` / `AMAP_JS_CODE`：高德地图服务端接口安全密钥。
+## 未来规划
 
-**前端环境 (`frontend/.env`)** *(可选)*
-- `VITE_API_BASE_URL`：指定后端 API 基础路径（默认为同域 `/api`）。
-- `VITE_AMAP_JS_KEY` / `VITE_AMAP_WEB_KEY`：前端高德 SDK 密钥。
+- [ ] AI 回忆录：集成大语言模型对日记内容进行语义分析，生成每周情感报告
+- [ ] 分布式存储：支持将图片资产同步到 S3 或其他云对象存储服务
+- [ ] 双人协作：实现双向账户绑定与实时内容共享
 
-## 📄 许可证
+## 许可证
 
-本项目默认供个人学习与私有化部署使用，如需开源分发请遵守相关协议规定。
+MIT License
