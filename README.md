@@ -10,7 +10,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql)
 ![Vite](https://img.shields.io/badge/Vite-Build-646CFF?style=flat-square&logo=vite)
 
-一个全栈生活记录应用，将地理空间索引与瀑布流时间线深度融合。通过集成高德地图 API 与自动化 Exif 元数据解析，系统在时间和空间两个维度上对齐记忆，构建直观的个人历史数字存储方案。本项目是 [lovejournal](https://github.com/saudademjj/lovejournal)（Flask 版本）的高性能异步重写版。
+一个全栈生活记录应用，将地理空间索引与瀑布流时间线深度融合。通过集成高德地图 API 与自动化 Exif 元数据解析，系统在时间和空间两个维度上对齐记忆，构建直观的个人历史数字存储方案。本项目是 LoveJournal v1（Flask 版本）的高性能异步重写版。
 
 ## 核心功能
 
@@ -135,7 +135,7 @@ alembic upgrade head
 
 ## 与 LoveJournal v1 的关系
 
-本项目是 [lovejournal](https://github.com/saudademjj/lovejournal)（基于 Flask 的初始版本）的架构升级重写：
+本项目是 LoveJournal v1（基于 Flask 的初始版本）的架构升级重写：
 
 | 维度 | v1 (Flask) | v2 (FastAPI) |
 |------|-----------|--------------|

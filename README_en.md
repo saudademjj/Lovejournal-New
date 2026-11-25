@@ -10,7 +10,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql)
 ![Vite](https://img.shields.io/badge/Vite-Build-646CFF?style=flat-square&logo=vite)
 
-A full-stack life recording application that merges geographic spatial indexing with a fluid waterfall timeline. By integrating the AMap API and automated Exif metadata parsing, the system aligns memories across both temporal and spatial dimensions, constructing an intuitive digital storage solution for personal history. This project is the high-performance async rewrite of [lovejournal](https://github.com/saudademjj/lovejournal) (Flask version).
+A full-stack life recording application that merges geographic spatial indexing with a fluid waterfall timeline. By integrating the AMap API and automated Exif metadata parsing, the system aligns memories across both temporal and spatial dimensions, constructing an intuitive digital storage solution for personal history. This project is the high-performance async rewrite of LoveJournal v1 (Flask version).
 
 ## Core Features
 
@@ -135,7 +135,7 @@ alembic upgrade head
 
 ## Relationship to LoveJournal v1
 
-This project is the architectural upgrade and rewrite of [lovejournal](https://github.com/saudademjj/lovejournal) (the original Flask-based version):
+This project is the architectural upgrade and rewrite of LoveJournal v1 (the original Flask-based version):
 
 | Dimension | v1 (Flask) | v2 (FastAPI) |
 |-----------|-----------|--------------|
